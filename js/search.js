@@ -53,8 +53,13 @@ export function parse(q, M) {
   const wk = text.match(/\b(?:week|wk|w)\s*#?\s*(\d{1,2})\b/);
   if (wk) out.week = Number(wk[1]);
 
+  // Full player names win over manager matches (team names often borrow player names).
+  const idx = playerIndex(M);
+  const playerSpans = [];
+  idx.full.forEach(p => { const i = text.indexOf(' ' + p.lower + ' '); if (i >= 0) playerSpans.push({ pid: p.pid, at: i + 1, len: p.lower.length }); });
+
   // Managers: exact names first, then a word that starts a manager's name ("sean", "dmanno").
-  const taken = [];
+  const taken = playerSpans.map(p => [p.at, p.at + p.len]);
   const hits = [];
   managerIndex(M).forEach(m => m.names.forEach(n => {
     const i = text.indexOf(n.replace(/'s$/, ''));
@@ -65,7 +70,7 @@ export function parse(q, M) {
       const w = word.replace(/'s$/, '');
       if (w.length < 4 || STOP.has(w) || /^\d+$/.test(w)) return;
       managerIndex(M).forEach(m => {
-        if (m.names.some(n => n.indexOf(w) === 0)) hits.push({ id: m.id, at: text.indexOf(' ' + word + ' '), len: word.length, fuzzy: true });
+        if (m.names.some(n => n.indexOf(w) === 0)) hits.push({ id: m.id, at: text.indexOf(' ' + word + ' ') + 1, len: word.length, fuzzy: true });
       });
     });
   }
@@ -74,9 +79,8 @@ export function parse(q, M) {
   });
 
   // Players: full names, then unique last names not used by a manager match.
-  const idx = playerIndex(M);
   const inTaken = i => taken.some(t => i >= t[0] && i < t[1]);
-  idx.full.forEach(p => { const i = text.indexOf(' ' + p.lower + ' '); if (i >= 0 && !inTaken(i + 1)) out.players.push({ pid: p.pid, at: i, len: p.lower.length }); });
+  playerSpans.forEach(p => out.players.push(p));
   if (!out.players.length) {
     idx.full.forEach(p => {
       if (p.last.length < 4 || STOP.has(p.last) || idx.lastCount[p.last] > 1) return;
