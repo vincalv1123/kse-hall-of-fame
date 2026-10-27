@@ -460,6 +460,38 @@ function breakdown(title, parts) {
     <span class="note" style="color:#A3B2B4">${p[3]}</span></div>`).join('')}</div>`;
 }
 
+// Awards a manager won in one season, and across a career.
+function awardRow(a, sub) {
+  return `<div class="row" style="grid-template-columns:22px minmax(0,1fr) auto;padding:12px 0">
+    <span class="dot" style="background:${a.good ? GOLD : '#F0907A'};width:8px;height:8px"></span>
+    <span class="stack"><span style="font-size:14px;font-weight:500">${esc(a.k)}</span><span class="sub">${sub}</span></span>
+    <span class="num" style="font-size:14px">${a.v}</span></div>`;
+}
+function managerSeasonAwards(x) {
+  const mine = seasonAwards(x.S).filter(a => a.rid === x.r).sort((a, b) => b.good - a.good);
+  const head = `<div class="head"><h2>${x.S.season} awards</h2><span class="note">${x.S.isCurrent ? 'So far this season' : mine.filter(a => a.good).length + ' good · ' + mine.filter(a => !a.good).length + ' bad'}</span></div>`;
+  if (!mine.length) return head + '<p class="lead">No awards this season.</p>';
+  return head + `<div class="rows">${mine.map(a => awardRow(a, a.d)).join('')}</div>`;
+}
+function managerCareerAwards(id, list) {
+  const won = {};
+  list.filter(x => !x.S.isCurrent).forEach(x => seasonAwards(x.S).filter(a => a.rid === x.r).forEach(a => {
+    const k = a.key === 'sacko' ? 'Sacko' : a.k;
+    const w = won[k] = won[k] || { k, good: a.good, years: [] };
+    w.years.push(x.S.season);
+  }));
+  const rows = Object.values(won).sort((a, b) => b.good - a.good || b.years.length - a.years.length);
+  const good = rows.filter(r => r.good).reduce((t, r) => t + r.years.length, 0);
+  const bad = rows.filter(r => !r.good).reduce((t, r) => t + r.years.length, 0);
+  const cur = list.find(x => x.S.isCurrent);
+  const curAw = cur ? seasonAwards(cur.S).filter(a => a.rid === cur.r) : [];
+  let html = `<div class="head"><h2>Career awards</h2><span class="note">Finished seasons</span></div>
+    <div class="cards"><div class="card"><span class="k gold-t">Good awards</span><span class="v">${good}</span></div><div class="card"><span class="k down">Bad awards</span><span class="v">${bad}</span></div></div>`;
+  html += rows.length ? `<div class="rows">${rows.map(r => awardRow({ ...r, v: r.years.length > 1 ? '×' + r.years.length : '' }, r.years.sort().reverse().join(', '))).join('')}</div>` : '<p class="lead">No awards yet.</p>';
+  if (curAw.length) html += `<p class="note" style="margin:0">On track in ${cur.S.season}: ${curAw.map(a => esc(a.k)).join(', ')}. These count once the season ends.</p>`;
+  return html;
+}
+
 function viewManager(id, seasonSel) {
   const c = M.career[id];
   if (!c) return section(`<h1>Manager not found.</h1><a class="btn" href="${PX}all">Back to All-Time</a>`, 'hero');
@@ -494,6 +526,7 @@ function viewManager(id, seasonSel) {
       ['Trades', String(x.trades.count), 'Net ' + signed(x.trades.net) + ' starter pts'],
       ['Team MVP', x.mvp ? esc(M.playerName(x.mvp.pid)) : '—', x.mvp ? f1(x.mvp.pts) + ' starter pts' : '']
     ])));
+    out.push(section(managerSeasonAwards(x)));
     const sc = x.score;
     const parts = [
       ['Results', W.results, sc.parts.results, `Win % ${pct3(st.winPct)} · all-play ${pct3(st.allPlayPct)}${sc.bonusParts.length ? ' · bonus: ' + sc.bonusParts.join(', ') : ''}`],
@@ -533,6 +566,7 @@ function viewManager(id, seasonSel) {
       ['Trades', W.trades, c.parts.trades, `${c.trades} trade${c.trades === 1 ? '' : 's'} · net ${signed(c.tradeNet)} starter pts`],
       ['Draft', W.draft, c.parts.draft, `${picks} picks · ${signed(draft, 0)} positional pts vs. what their draft slots usually produce`]
     ].filter(p => p[2] != null);
+    out.push(section(managerCareerAwards(id, list)));
     out.push(section(breakdown(`How the ${Math.round(c.score)} breaks down`, parts) +
       '<span class="note">50 = league average that season. Each part here is the games-weighted average of that part across seasons.</span>' + careerCalc(id, list)));
   }
