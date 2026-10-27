@@ -363,7 +363,8 @@ function buildSeason(raw, players, isNewest, later, format) {
     trade[r] = tradeNet[r].net;
     draft[r] = draftVal[r];
   });
-  const hasDraft = picks.length > 0;
+  // Dynasty drafts are left out of the Manager Score; the other parts are reweighted to fill the gap.
+  const hasDraft = picks.length > 0 && format !== 'dynasty';
   const sc = { results: scale(results), startSit: scale(startSit), waivers: scale(waiv), trades: scale(trade), draft: scale(draft) };
   const W = CONFIG.weights;
   const wsum = W.results + W.startSit + W.waivers + W.trades + (hasDraft ? W.draft : 0);

@@ -22,7 +22,7 @@ Each part is scored against the rest of the league that season (50 = average), t
 
 The career score averages every season, weighted by games played.
 
-In the dynasty league, trades keep counting in later seasons for as long as the player stays on that team, and taxi-squad players are left out of the best-possible lineup. Change weights and other settings in `js/config.js`.
+In the dynasty league, the draft part is left out of the score (the other four are reweighted), trades keep counting in later seasons for as long as the player stays on that team, and taxi-squad players are left out of the best-possible lineup. Change weights and other settings in `js/config.js`.
 
 ## Files
 
