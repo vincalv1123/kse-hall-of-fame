@@ -19,16 +19,17 @@ const ROUND_WORDS = { first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth:
 // ---------- parsing ----------
 export function parseRank(t) {
   const best = /\b(best|greatest|top|highest|most|biggest|luckiest|largest|leading|mvp|steal)\b/.test(t);
-  const worst = /\b(worst|lowest|fewest|least|smallest|unluckiest|bust|weakest)\b/.test(t);
+  const worst = /\b(worst|lowest|fewest|least|smallest|unluckiest|bust|weakest|closest)\b/.test(t);
   if (!best && !worst) return null;
   const goodness = /\b(best|worst|greatest|luckiest|unluckiest|steal|bust|weakest)\b/.test(t);
   const desc = best && !worst;
+  const sup = (t.match(/\b(best|greatest|top|highest|most|biggest|luckiest|largest|leading|worst|lowest|fewest|least|smallest|unluckiest|weakest|closest)\b/) || [])[1] || '';
 
   let entity = null;
   if (/\b(draft picks?|picks?|drafted|selections?)\b/.test(t) || /\bround\b/.test(t)) entity = 'pick';
   else if (/\btrades?\b/.test(t)) entity = 'trade';
   else if (/\b(pickups?|waiver|waivers|adds?|free agents?|faab)\b/.test(t)) entity = 'pickup';
-  else if (/\b(player|players)\b/.test(t) && /\bseasons?\b/.test(t)) entity = 'playerSeason';
+  else if ((/\b(player|players)\b/.test(t) || Object.keys(POS).some(k => new RegExp('\\b' + k + '\\b').test(t))) && /\bseasons?\b/.test(t)) entity = 'playerSeason';
   else if (/\b(blowout|blowouts|closest|margin)\b/.test(t)) entity = 'game';
   else if (/\b(in a loss|in a win)\b/.test(t)) entity = 'score';
   else if (/\bseasons?\b|\byears?\b/.test(t)) entity = 'season';
@@ -63,7 +64,7 @@ export function parseRank(t) {
   const playoffs = /\bplayoffs?\b/.test(t);
   const inLoss = /\bin a loss\b/.test(t); const inWin = /\bin a win\b/.test(t);
   const blowout = /\bblowouts?\b/.test(t); const closest = /\bclosest\b/.test(t);
-  return { desc, goodness, entity, metric, round, pos, playoffs, inLoss, inWin, blowout, closest };
+  return { desc, sup, goodness, entity, metric, round, pos, playoffs, inLoss, inWin, blowout, closest };
 }
 
 // ---------- helpers over the model ----------
@@ -185,10 +186,16 @@ export function rankAnswer(M, P, R) {
   if (R.goodness && lowerIsBetter) desc = !desc;
   rows.sort((a, b) => (desc ? b.v - a.v : a.v - b.v));
   const top = rows.slice(0, 10);
-  const word = R.goodness ? (R.desc ? 'Best' : 'Worst') : (R.desc ? (R.entity === 'game' && !R.closest ? 'Biggest' : 'Most') : (R.closest ? 'Closest' : 'Fewest'));
-  const headWord = R.entity === 'game' ? (R.closest ? 'Closest game' : 'Biggest blowout') : (R.goodness ? word : (R.desc ? 'Highest' : 'Lowest')) + ' ' + entityLabel;
-  const scope = (P.season ? ' of ' + P.season : ' ever') + (mgr ? ' for ' + esc(M.nameOf(mgr)) : '') + (R.playoffs ? ' in the playoffs' : '');
-  const head = `${headWord}${scope}${R.entity === 'game' || R.entity === 'score' || R.entity === 'perf' ? '' : ' by ' + metricLabel}: ${top[0].label.replace(/<span class="note">.*?<\/span>/, '').trim()}, ${fmt(top[0].v)}.`;
+  const scope = (P.season ? (R.entity === 'manager' ? '' : ' of ' + P.season) : ' ever') + (mgr ? ' for ' + esc(M.nameOf(mgr)) : '') + (R.playoffs ? ' in the playoffs' : '');
+  const cap = w => w.charAt(0).toUpperCase() + w.slice(1);
+  let head;
+  if (R.entity === 'game') head = (R.closest ? 'Closest game' : 'Biggest blowout') + scope;
+  else if (R.entity === 'score' || R.entity === 'perf') head = (desc ? 'Highest ' : 'Lowest ') + entityLabel + scope;
+  else if (metric === 'luck') head = (desc ? 'Luckiest ' : 'Unluckiest ') + entityLabel + scope;
+  else if (R.goodness) head = (R.desc ? 'Best ' : 'Worst ') + entityLabel + scope + ' by ' + metricLabel;
+  else head = cap(R.sup && /highest|lowest/.test(R.sup) ? R.sup : desc ? 'most' : 'fewest') + ' ' + metricLabel + (R.entity === 'season' ? ' in a season' : R.entity === 'manager' ? '' : ' for a ' + entityLabel) + scope;
+  const ties = rows.filter(x => x.v === top[0].v).length;
+  head += ': ' + top[0].label.replace(/<span class="note">.*?<\/span>/, '').trim() + ', ' + fmt(top[0].v) + (ties > 1 ? ' (tied with ' + (ties - 1) + ' other' + (ties > 2 ? 's' : '') + ')' : '') + '.';
   return `<div class="answer"><h2 class="ans-title">${head}</h2>
     <div class="rows">${top.map((x, i) => `<div class="row" style="grid-template-columns:28px minmax(0,1fr) auto;padding:11px 0">
       <span class="num" style="font-size:12px;color:${i === 0 ? '#E8B04B' : '#8A9C9F'}">${i + 1}</span>
