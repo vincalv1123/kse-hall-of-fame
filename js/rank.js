@@ -118,7 +118,7 @@ export function rankAnswer(M, P, R) {
   } else if (R.entity === 'pick') {
     metric = metric === 'ppg' || metric === 'points' ? metric : 'value';
     entityLabel = (R.round ? ordinal(R.round) + '-round ' : '') + (R.pos ? R.pos + ' ' : '') + 'pick';
-    metricLabel = metric === 'ppg' ? 'points per game' : metric === 'points' ? 'season points' : 'points vs. picks near that slot';
+    metricLabel = metric === 'ppg' ? 'points per game' : metric === 'points' ? 'season points' : 'positional value vs. slot';
     fmt = metric === 'value' ? sgn : metric === 'ppg' ? f2 : f1;
     const minGames = metric === 'ppg' ? 4 : 0;
     seasons.forEach(S => { const ps = playerSeasonStats(S);

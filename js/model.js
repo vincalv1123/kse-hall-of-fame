@@ -288,12 +288,32 @@ function buildSeason(raw, players, isNewest, later, format) {
   S.playerPts = playerPts;
   S.posRank = posRank;
 
-  // Draft: each pick against what picks around that slot produced this season.
-  const picks = raw.picks.filter(p => p.player_id).map(p => ({ ...p, pts: playerPts[p.player_id] || 0, pos: posOf(p.player_id) }));
+  // Positional value: points above a replacement-level starter at the same position.
+  // The replacement level is the first player past the league's starting spots at that position
+  // (dedicated slots plus a share of each flex), e.g. QB13 in a 12-team 1-QB league.
+  const share = { QB: 0, RB: 0, WR: 0, TE: 0, K: 0, DEF: 0 };
+  const FLEX_SPLIT = { FLEX: { RB: 0.4, WR: 0.5, TE: 0.1 }, SUPER_FLEX: { QB: 0.8, RB: 0.08, WR: 0.1, TE: 0.02 }, WRRB_FLEX: { WR: 0.55, RB: 0.45 }, REC_FLEX: { WR: 0.8, TE: 0.2 } };
+  S.slots.forEach(sl => {
+    if (ELIGIBLE[sl].length === 1) share[ELIGIBLE[sl][0]] += 1;
+    else Object.entries(FLEX_SPLIT[sl] || {}).forEach(([p, f]) => { share[p] += f; });
+  });
+  const replacement = {};
+  Object.keys(share).forEach(p => {
+    if (!share[p]) return;
+    const rank = Math.max(1, Math.round(rids.length * share[p]));
+    const list = (byPos[p] || []);
+    replacement[p] = { rank: rank + 1, pts: list[rank] ? playerPts[list[rank]] : 0 };
+  });
+  S.replacement = replacement;
+  const aboveRepl = pid => { const p = posOf(pid); return replacement[p] ? (playerPts[pid] || 0) - replacement[p].pts : 0; };
+  S.aboveRepl = aboveRepl;
+
+  // Draft: each pick's positional value against what picks around that slot produced this season.
+  const picks = raw.picks.filter(p => p.player_id).map(p => ({ ...p, pts: playerPts[p.player_id] || 0, pos: posOf(p.player_id), vor: aboveRepl(p.player_id) }));
   picks.forEach(p => {
     const near = picks.filter(q => Math.abs(q.pick_no - p.pick_no) <= 6);
-    p.expected = mean(near.map(q => q.pts));
-    p.value = p.pts - p.expected;
+    p.expected = mean(near.map(q => q.vor));
+    p.value = p.vor - p.expected;
   });
   const draftVal = {};
   rids.forEach(r => { draftVal[r] = 0; });

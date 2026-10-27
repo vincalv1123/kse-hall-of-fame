@@ -433,7 +433,7 @@ function seasonCalc(x) {
     <div class="scroll"><table class="table"><thead><tr><th>Part</th><th>Raw stat</th><th>League avg</th><th>Spread</th><th>Scaled</th><th>Weight</th><th>Adds</th></tr></thead>
     <tbody>${rows}<tr><td class="t" style="font-weight:600">Total</td><td></td><td></td><td></td><td></td><td></td><td style="font-weight:600;color:#F1F4F3">${f1(sc.total)}</td></tr></tbody></table></div>
     <ol class="steps">
-      <li><b>Raw stats.</b> Results = ½ × win % (${pct3(x.st.winPct)}) + ½ × all-play (${pct3(x.st.allPlayPct)}) = ${pct3(sc.raw.results)}. Start/sit = points started ÷ best possible lineup (${comma(x.eff.actual)} ÷ ${comma(x.eff.optimal)}). Waivers = starter points from pickups. Trades = starter points gained minus given up.${S.hasDraft ? ' Draft = points from your picks minus what picks near the same slots scored.' : ''}</li>
+      <li><b>Raw stats.</b> Results = ½ × win % (${pct3(x.st.winPct)}) + ½ × all-play (${pct3(x.st.allPlayPct)}) = ${pct3(sc.raw.results)}. Start/sit = points started ÷ best possible lineup (${comma(x.eff.actual)} ÷ ${comma(x.eff.optimal)}). Waivers = starter points from pickups. Trades = starter points gained minus given up.${S.hasDraft ? ' Draft = each pick's points above a replacement-level starter at his position, minus what picks near the same slot were worth.' : ''}</li>
       <li><b>Scaled.</b> 50 + 20 × (raw − league avg) ÷ spread, kept between 0 and 100. Spread is the standard deviation across all ${S.rids.length} teams that season.</li>
       <li><b>Bonus.</b> ${sc.bonusParts.length ? 'Results got ' + sc.bonusParts.join(', ') + ' (capped at 100).' : 'No playoff, final or title bonus this season.'}${S.isCurrent ? ' Bonuses are added once the season ends.' : ''}</li>
       <li><b>Score.</b> Each scaled part × its weight, divided by the total weight (${Math.round(S.weightSum * 100)}%) = <b>${f1(sc.total)}</b>.</li>
@@ -500,7 +500,7 @@ function viewManager(id, seasonSel) {
       ['Start/sit', W.startSit, sc.parts.startSit, `Started ${(x.eff.pct * 100).toFixed(1)}% of best possible points · ${Math.round(x.eff.benchLeft)} pts left on the bench`],
       ['Waivers', W.waivers, sc.parts.waivers, `${f1(x.waiv.pts)} starter pts from ${x.waiv.adds} pickups${x.waiv.best && x.waiv.best.pts > 0 ? ' · best: ' + player(x.waiv.best.pid) + ' (' + f1(x.waiv.best.pts) + ')' : ''}`],
       ['Trades', W.trades, sc.parts.trades, `${x.trades.count} trade${x.trades.count === 1 ? '' : 's'} · net ${signed(x.trades.net)} starter pts`],
-      ['Draft', W.draft, sc.parts.draft, `${x.picks} picks · ${signed(x.draftVal, 0)} pts vs. what picks near those slots scored`]
+      ['Draft', W.draft, sc.parts.draft, `${x.picks} picks · ${signed(x.draftVal, 0)} positional pts vs. what picks near those slots were worth`]
     ].filter(p => p[2] != null);
     out.push(section(breakdown(`How the ${S.season} ${Math.round(sc.total)} breaks down`, parts) + seasonCalc(x)));
   } else {
@@ -524,14 +524,14 @@ function viewManager(id, seasonSel) {
       ['Start/sit', (c.effPct * 100).toFixed(1) + '%', Math.round(c.benchLeft) + ' pts left on the bench'],
       ['Waivers', adds + ' adds', comma(c.waiverPts) + ' starter pts' + (faabSeasons ? ' · $' + faab + ' FAAB' : '')],
       ['Trades', String(c.trades), 'Net ' + signed(c.tradeNet) + ' starter pts'],
-      ['Draft', picks + ' picks', signed(draft, 0) + ' pts vs. their slots']
+      ['Draft', picks + ' picks', signed(draft, 0) + ' positional pts vs. their slots']
     ])));
     const parts = [
       ['Results', W.results, c.parts.results, `Win % ${pct3(c.winPct)} · all-play ${pct3(apG ? apSum / apG : 0)}${c.titles ? ' · title bonus ×' + c.titles : ''}`],
       ['Start/sit', W.startSit, c.parts.startSit, `Started ${(c.effPct * 100).toFixed(1)}% of best possible points · ${Math.round(c.benchLeft)} pts left on the bench`],
       ['Waivers', W.waivers, c.parts.waivers, `${comma(c.waiverPts)} starter pts from ${adds} pickups`],
       ['Trades', W.trades, c.parts.trades, `${c.trades} trade${c.trades === 1 ? '' : 's'} · net ${signed(c.tradeNet)} starter pts`],
-      ['Draft', W.draft, c.parts.draft, `${picks} picks · ${signed(draft, 0)} pts vs. what their draft slots usually produce`]
+      ['Draft', W.draft, c.parts.draft, `${picks} picks · ${signed(draft, 0)} positional pts vs. what their draft slots usually produce`]
     ].filter(p => p[2] != null);
     out.push(section(breakdown(`How the ${Math.round(c.score)} breaks down`, parts) +
       '<span class="note">50 = league average that season. Each part here is the games-weighted average of that part across seasons.</span>' + careerCalc(id, list)));
@@ -644,12 +644,12 @@ function viewDrafts(seasonSel) {
     <h1>${S.season} draft. <span class="soft">${nm(teams[0].r)} drafted best, ${nm(teams[teams.length - 1].r)} worst.</span></h1>
     <nav class="chips" aria-label="Choose a draft">${withPicks.map(x => `<a class="pill${x === S ? ' on' : ''}" href="${PX}drafts@${x.season}">${x.season}</a>`).join('')}</nav>`, 'hero'));
 
-  out.push(section(`<div class="head"><h2>Team grades</h2><span class="note">Pick points vs. what picks near the same slots scored${S.isCurrent ? ', so far' : ''}</span></div>
+  out.push(section(`<div class="head"><h2>Team grades</h2><span class="note">Positional value vs. picks near the same slots${S.isCurrent ? ', so far' : ''}</span></div>
     <div class="rows">${teams.map(t => `<a class="row" href="${mlink(S.ownerOf[t.r])}@${S.season}" style="grid-template-columns:40px minmax(0,1fr) auto">
       <span class="grade" style="background:${GRADE_COLORS[t.grade]}">${t.grade}</span>
       <span class="stack"><span class="name" style="font-size:15px">${nm(t.r)}</span><span class="sub">${t.best ? 'Best pick: ' + player(t.best.player_id) + ' (R' + t.best.round + ')' : 'No picks'}</span></span>
       <span class="num ${sign(t.total)}" style="font-size:15px">${signed(t.total, 0)}</span></a>`).join('')}</div>
-    <span class="note">Grades compare each team's total with the other teams: A is a standout draft, C is about average, F is far below.</span>`));
+    <span class="note">Each pick is worth its points above a replacement-level starter at its position (${Object.entries(S.replacement).map(([p, x]) => p + x.rank).join(', ')}), compared with what picks near the same slot were worth. A late QB who scores a lot but barely beats the replacement QB isn't rated above a late RB who became a starter. Grades compare each team's total with the rest of the league: A is a standout draft, C is about average, F is far below.</span>`));
 
   const rounds = [...new Set(S.picks.map(p => p.round))].sort((a, b) => a - b);
   out.push(section(`<h2>Round by round</h2>${rounds.map(rd => {
@@ -657,14 +657,14 @@ function viewDrafts(seasonSel) {
     const best = picks.slice().sort((a, b) => b.value - a.value)[0];
     const worst = picks.slice().sort((a, b) => a.value - b.value)[0];
     return `<details class="calc round"${rd <= 2 ? ' open' : ''}><summary>Round ${rd}<span class="note" style="font-weight:400;margin-left:auto;margin-right:12px">Best: ${player(best.player_id)}</span></summary><div class="calc-body" style="padding-top:4px">
-      <div class="scroll"><table class="table"><thead><tr><th>Pick</th><th style="text-align:left">Player</th><th>Pts</th><th>Finish</th>${dynasty ? '<th>Since</th>' : ''}<th>vs. slot</th></tr></thead><tbody>
+      <div class="scroll"><table class="table"><thead><tr><th>Pick</th><th style="text-align:left">Player</th><th>Pts</th><th>Finish</th><th>Above repl.</th>${dynasty ? '<th>Since</th>' : ''}<th>vs. slot</th></tr></thead><tbody>
       ${picks.map(p => `<tr><td class="rk" style="width:auto">${p.round}.${String(((p.pick_no - 1) % n) + 1).padStart(2, '0')}</td>
         <td class="t"><span style="display:flex;flex-direction:column;gap:2px"><span>${player(p.player_id)} <span class="note">${esc(p.pos)}</span>${p === best ? ' <span class="tag up">Best</span>' : p === worst ? ' <span class="tag down">Worst</span>' : ''}</span>
         <a class="note" href="${mlink(S.ownerOf[p.roster_id])}" style="text-decoration:none;font-weight:400">${nm(p.roster_id)}</a></span></td>
-        <td>${f1(p.pts)}</td><td style="color:#C9D3D2">${S.posRank[p.player_id] ? esc(p.pos) + S.posRank[p.player_id] : '—'}</td>${dynasty ? `<td style="color:#C9D3D2">${f1(sincePts(p.player_id))}</td>` : ''}
+        <td>${f1(p.pts)}</td><td style="color:#C9D3D2">${S.posRank[p.player_id] ? esc(p.pos) + S.posRank[p.player_id] : '—'}</td><td>${signed(p.vor, 0)}</td>${dynasty ? `<td style="color:#C9D3D2">${f1(sincePts(p.player_id))}</td>` : ''}
         <td class="${sign(p.value)}">${signed(p.value, 0)}</td></tr>`).join('')}</tbody></table></div></div></details>`;
   }).join('')}
-    <span class="note">Pts = regular-season points that year. Finish = rank at his position among rostered players.${dynasty ? ' Since = regular-season points in every season after this draft, for any team.' : ''}</span>`));
+    <span class="note">Pts = regular-season points that year. Finish = rank at his position among rostered players. Above repl. = points above the replacement-level starter at his position. vs. slot = above repl. minus what picks near that slot averaged.${dynasty ? ' Since = regular-season points in every season after this draft, for any team.' : ''}</span>`));
   return out.join('');
 }
 
