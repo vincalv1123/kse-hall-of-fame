@@ -447,8 +447,11 @@ function simulateOdds(S, raw, byWeek, st) {
     Object.values(byWeek[w] || {}).forEach(m => { if (m.matchup_id != null) (groups[m.matchup_id] = groups[m.matchup_id] || []).push(m.roster_id); });
     Object.values(groups).forEach(g => { if (g.length === 2) future.push(g); });
   }
-  const made = {}; const top = {}; const titles = {}; const finals = {};
-  rids.forEach(r => { made[r] = 0; top[r] = 0; titles[r] = 0; finals[r] = 0; });
+  const made = {}; const top = {}; const titles = {}; const finals = {}; const byes = {};
+  rids.forEach(r => { made[r] = 0; top[r] = 0; titles[r] = 0; finals[r] = 0; byes[r] = 0; });
+  // First-round byes go to the top seeds when the playoff field isn't a power of two (6 teams: seeds 1–2).
+  let bracketSize = 1; while (bracketSize < S.playoffTeams) bracketSize *= 2;
+  const byeCount = bracketSize - S.playoffTeams;
   const N = CONFIG.simulations;
   function normal() { let u = 0; let v = 0; while (u === 0) u = Math.random(); while (v === 0) v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
   const play = (a, b) => {
@@ -497,14 +500,15 @@ function simulateOdds(S, raw, byWeek, st) {
     const order = rids.slice().sort((a, b) => wins[b] - wins[a] || pf[b] - pf[a]);
     const seeds = order.slice(0, S.playoffTeams);
     seeds.forEach(r => { made[r]++; });
+    seeds.slice(0, byeCount).forEach(r => { byes[r]++; });
     top[order[0]]++;
     const out = bracketLive ? bracketFromSleeper() : bracketFromSeeds(seeds);
     if (out.champ != null) titles[out.champ]++;
     out.finalists.forEach(r => { if (r != null) finals[r]++; });
   }
   const out = {};
-  rids.forEach(r => { out[r] = { playoffs: bracketLive ? (S.playoffRids.has(r) ? 1 : 0) : made[r] / N, first: top[r] / N, title: titles[r] / N, final: finals[r] / N }; });
-  return { byRid: out, remainingWeeks: Math.max(0, lastReg - S.scoredThrough), bracketLive };
+  rids.forEach(r => { out[r] = { playoffs: bracketLive ? (S.playoffRids.has(r) ? 1 : 0) : made[r] / N, first: top[r] / N, bye: byes[r] / N, title: titles[r] / N, final: finals[r] / N }; });
+  return { byRid: out, remainingWeeks: Math.max(0, lastReg - S.scoredThrough), bracketLive, byeCount };
 }
 
 export function buildModel(data, format) {

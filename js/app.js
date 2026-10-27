@@ -290,12 +290,12 @@ function viewSeason(S) {
       const fav = rows[0];
       out.push(section(`<div class="head"><h2>${showPlayoffs ? 'Playoff and title odds' : 'Title odds'}</h2><span class="note">${CONFIG.simulations.toLocaleString()} simulated seasons</span></div>
         <p class="lead">${nm(fav)} is the title favorite at ${pctLabel(O.byRid[fav].title)}.</p>
-        <div class="scroll"><table class="table"><thead><tr><th>Team</th>${showPlayoffs ? '<th>Playoffs</th>' : ''}<th>Final</th><th>Title</th></tr></thead><tbody>
+        <div class="scroll"><table class="table"><thead><tr><th>Team</th>${showPlayoffs ? '<th>Playoffs</th>' : ''}${showPlayoffs && O.byeCount ? '<th>Bye</th>' : ''}<th>Final</th><th>Title</th></tr></thead><tbody>
         ${rows.map((r, i) => { const o = O.byRid[r]; const st = S.st[r];
           return `<tr><td class="t"><a href="${ml(r)}" style="text-decoration:none">${nm(r)}</a> <span class="note">${wl(st.wins, st.losses, st.ties)}</span></td>
-            ${showPlayoffs ? `<td>${pctLabel(o.playoffs)}</td>` : ''}<td style="color:#C9D3D2">${pctLabel(o.final)}</td>
+            ${showPlayoffs ? `<td>${pctLabel(o.playoffs)}</td>` : ''}${showPlayoffs && O.byeCount ? `<td>${pctLabel(o.bye)}</td>` : ''}<td style="color:#C9D3D2">${pctLabel(o.final)}</td>
             <td><span style="display:inline-flex;align-items:center;gap:8px;justify-content:flex-end"><span class="bar thick" style="width:60px;display:inline-block"><i style="width:${o.title * 100}%;background:${i === 0 ? GOLD : '#C9D3D2'}"></i></span>${pctLabel(o.title)}</span></td></tr>`; }).join('')}</tbody></table></div>
-        <span class="note">${showPlayoffs ? 'Every remaining regular-season game, then the playoff bracket (top ' + S.playoffTeams + ', top seeds get byes), is played out using each team\'s scoring this season.' : 'The rest of the bracket is played out using each team\'s scoring this season. Games already played count as they happened.'}</span>`));
+        <span class="note">${showPlayoffs ? 'Every remaining regular-season game, then the playoff bracket (top ' + S.playoffTeams + (O.byeCount ? ', with first-round byes for the top ' + O.byeCount : '') + '), is played out using each team\'s scoring this season.' : 'The rest of the bracket is played out using each team\'s scoring this season. Games already played count as they happened.'}</span>`));
     }
   } else {
     const rounds = S.games.filter(g => g.playoff).reduce((m, g) => Math.max(m, g.round || 0), 0);
@@ -626,6 +626,7 @@ function viewDrafts(seasonSel) {
   const later = M.seasons.filter(x => Number(x.season) > Number(S.season));
   const dynasty = LG.format === 'dynasty' && later.length;
   const sincePts = pid => later.reduce((t, x) => t + (x.playerPts[pid] || 0), 0);
+  const showGrades = LG.format !== 'dynasty';
 
   // Team grades: total value of a team's picks, scored against the other teams.
   const teams = S.rids.map(r => {
@@ -641,10 +642,10 @@ function viewDrafts(seasonSel) {
 
   const out = [];
   out.push(section(`<div class="eyebrow">Draft history${S.isCurrent ? ' · season in progress' : ''}</div>
-    <h1>${S.season} draft. <span class="soft">${nm(teams[0].r)} drafted best, ${nm(teams[teams.length - 1].r)} worst.</span></h1>
+    <h1>${S.season} draft. <span class="soft">${showGrades ? nm(teams[0].r) + ' drafted best, ' + nm(teams[teams.length - 1].r) + ' worst.' : 'Every pick, round by round.'}</span></h1>
     <nav class="chips" aria-label="Choose a draft">${withPicks.map(x => `<a class="pill${x === S ? ' on' : ''}" href="${PX}drafts@${x.season}">${x.season}</a>`).join('')}</nav>`, 'hero'));
 
-  out.push(section(`<div class="head"><h2>Team grades</h2><span class="note">Positional value vs. picks near the same slots${S.isCurrent ? ', so far' : ''}</span></div>
+  if (showGrades) out.push(section(`<div class="head"><h2>Team grades</h2><span class="note">Positional value vs. picks near the same slots${S.isCurrent ? ', so far' : ''}</span></div>
     <div class="rows">${teams.map(t => `<a class="row" href="${mlink(S.ownerOf[t.r])}@${S.season}" style="grid-template-columns:40px minmax(0,1fr) auto">
       <span class="grade" style="background:${GRADE_COLORS[t.grade]}">${t.grade}</span>
       <span class="stack"><span class="name" style="font-size:15px">${nm(t.r)}</span><span class="sub">${t.best ? 'Best pick: ' + player(t.best.player_id) + ' (R' + t.best.round + ')' : 'No picks'}</span></span>
