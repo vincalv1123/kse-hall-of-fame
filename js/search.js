@@ -8,7 +8,7 @@ export const EXAMPLES = [
   'J00NE lineup week 10 2025',
   'SeanWrong10 vs kthugger',
   'kthugger 2024 season',
-  'Ja\'Marr Chase points for vpcalv 2025'
+  'Josh Allen points for kthugger 2024'
 ];
 
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
