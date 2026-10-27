@@ -122,7 +122,7 @@ function viewAll() {
       const others = heist.trade.sides.filter(s => s.owner !== heist.side.owner).map(s => name(s.owner)).join(' & ');
       html += `<div class="box"><span class="note" style="text-transform:uppercase;letter-spacing:.05em;font-size:11px">Biggest trade heist</span>
         <div class="line2"><span style="font-weight:600">${name(heist.side.owner)} over ${others}</span><span class="num up">${signed(heist.side.net)}</span></div>
-        <span class="note">${heist.trade.season} · Week ${heist.trade.week} · got ${heist.side.got.map(g => player(g.pid)).join(', ') || 'picks'} · starter pts gained, rest of season</span></div>`;
+        <span class="note">${heist.trade.season} · Week ${heist.trade.week} · got ${heist.side.got.map(g => player(g.pid)).join(', ') || 'picks'} · starter pts gained, ${LG.format === 'dynasty' ? 'including later seasons' : 'rest of season'}</span></div>`;
     }
     out.push(section(html));
   }
@@ -286,7 +286,7 @@ function viewSeason(S) {
     <span style="font-size:15px;font-weight:600">${a.who}</span><span class="num" style="font-size:15px">${a.v}</span><span class="d">${a.d}</span></div>`).join('')}</div>`));
 
   if (S.trades.length) {
-    out.push(section(`<div class="head"><h2>Trades</h2><span class="note">${S.trades.length} trade${S.trades.length > 1 ? 's' : ''} · starter pts for the rest of the season</span></div>
+    out.push(section(`<div class="head"><h2>Trades</h2><span class="note">${S.trades.length} trade${S.trades.length > 1 ? 's' : ''} · ${LG.format === 'dynasty' ? 'starter pts since, all seasons' : 'starter pts for the rest of the season'}</span></div>
       <div style="display:flex;flex-direction:column;gap:10px">${S.trades.slice().reverse().map(t => `<div class="box"><div class="top-line"><span>Week ${t.week}</span><span>Net starter pts</span></div>
       ${t.sides.map(s => `<div class="line2"><span style="font-size:14px;min-width:0"><a href="${ml(s.rid)}" style="text-decoration:none;font-weight:500">${nm(s.rid)}</a>
         <span style="color:#8A9C9F"> got ${s.got.map(g => player(g.pid)).join(', ') || 'draft picks'}</span></span>
