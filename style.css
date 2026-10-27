@@ -151,6 +151,21 @@ a.card:hover { background: var(--panel-2); }
 .pickers select.a { border-color: var(--gold); }
 .pickers .vs { font-size: 13px; color: var(--muted); padding-bottom: 13px; }
 
+/* Stat search */
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.search { display: flex; gap: 8px; margin-top: 6px; }
+.search input { flex: 1; min-width: 0; height: 48px; padding: 0 18px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--panel); color: var(--fg); font-family: inherit; font-size: 15px; }
+.search input::placeholder { color: var(--muted); }
+.search input:focus { outline: none; border-color: var(--gold); }
+.search .go { flex: none; height: 48px; padding: 0 20px; border-radius: 999px; border: 0; background: var(--paper); color: var(--ink); font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.chip.ex { background: none; font-family: inherit; cursor: pointer; text-align: left; }
+.chip.ex:hover { border-color: var(--fg-2); color: var(--fg); }
+.answer { display: flex; flex-direction: column; gap: 14px; }
+.ans-title { font-size: clamp(20px, 5vw, 26px); line-height: 1.25; letter-spacing: -0.02em; text-wrap: balance; }
+.answer a:not(.btn) { color: var(--fg); text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+.help { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #A3B2B4; line-height: 1.45; }
+.help b { color: var(--fg); font-weight: 500; }
+
 .status { padding-block: 80px; text-align: center; color: var(--muted); font-size: 14px; }
 .status.err { color: var(--down); }
 footer .wrap { padding-block: 24px 40px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }

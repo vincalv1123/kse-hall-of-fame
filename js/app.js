@@ -3,6 +3,7 @@
 import { CONFIG } from './config.js';
 import { loadAll, loadLiveWeek } from './data.js';
 import { buildModel } from './model.js';
+import { parse as parseQuery, answer as answerQuery, EXAMPLES, HELP } from './search.js';
 
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
@@ -24,6 +25,7 @@ const TROPHY = (color, size = 18) => `<svg width="${size}" height="${size}" view
 const DOWN = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F0907A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"/></svg>';
 const MARK = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9"/></svg>';
 const GOLD = '#E8B04B';
+const SEARCH_ICON = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>';
 const section = (inner, cls = '') => `<section class="${cls}"><div class="wrap">${inner}</div></section>`;
 const seasonOf = s => M.seasons.find(x => x.season === s);
 const completed = () => M.seasons.filter(s => !s.isCurrent);
@@ -32,7 +34,7 @@ const player = pid => esc(M.playerName(pid));
 
 // ---------- tabs ----------
 function renderTabs(route) {
-  const items = [`<a class="pill${route.view === 'all' ? ' on' : ''}" href="#all">All-Time</a>`]
+  const items = [`<a class="pill${route.view === 'all' ? ' on' : ''}" href="#all">All-Time</a>`, `<a class="pill${route.view === 'search' ? ' on' : ''}" href="#search">${SEARCH_ICON} Stat search</a>`]
     .concat(M.seasons.map(s => `<a class="pill${route.view === 'season' && route.season === s.season ? ' on' : ''}" href="#s${s.season}">${s.isCurrent ? '<span class="dot"></span>' : ''}${s.season}</a>`));
   $tabs.innerHTML = items.join('');
   const on = $tabs.querySelector('.on');
@@ -45,7 +47,8 @@ function viewAll() {
   const first = M.seasons.length ? M.seasons[M.seasons.length - 1].season : '';
   const out = [];
   out.push(section(`<div class="eyebrow">${MARK} All-time archive · since ${first}</div>
-    <h1>Every title, record and trade <span class="soft">since the league began.</span></h1>`, 'hero'));
+    <h1>Every title, record and trade <span class="soft">since the league began.</span></h1>
+    ${searchForm('home-q', '')}`, 'hero'));
 
   const reign = done.find(s => s.champion);
   if (reign) {
@@ -67,10 +70,10 @@ function viewAll() {
       <span class="sub">Runner-up ${s.runnerUp ? name(s.ownerOf[s.runnerUp]) : '—'} · Last ${s.lastPlace ? name(s.ownerOf[s.lastPlace]) : '—'}</span></span>
       ${TROPHY(GOLD)}</a>`).join('')}</div>`));
 
-    out.push(section(`<div class="head"><h2>Wall of Shame</h2><span class="note">Worst regular-season record, every year</span></div>
+    out.push(section(`<div class="head"><h2>Wall of Shame</h2><span class="note">Toilet bowl losers, every year</span></div>
       <div class="rows">${done.filter(s => s.lastPlace).map(s => { const st = s.st[s.lastPlace]; return `
       <a class="row r-trophy" href="${mlink(s.ownerOf[s.lastPlace])}"><span class="year">${s.season}</span>
-      <span class="stack"><span class="name">${name(s.ownerOf[s.lastPlace])}</span><span class="sub">${wl(st.wins, st.losses, st.ties)} · ${comma(st.pf)} PF</span></span>${DOWN}</a>`; }).join('')}</div>`));
+      <span class="stack"><span class="name">${name(s.ownerOf[s.lastPlace])}</span><span class="sub">${s.toiletBowl ? 'Lost the toilet bowl · ' : ''}${wl(st.wins, st.losses, st.ties)} regular season</span></span>${DOWN}</a>`; }).join('')}</div>`));
   }
 
   const lb = M.leaderboard;
@@ -269,8 +272,9 @@ function viewSeason(S) {
     const b = S.benchBlunder;
     aw.push({ k: 'Bench Blunder', who: nm(b.rid), v: f1(b.gap) + ' pts', d: 'Week ' + b.week + ' points left on the bench' + (b.wouldHaveWon ? ' · would have won' : b.lostBy != null ? ' · lost by ' + f1(b.lostBy) : ''), cls: 'down' });
   }
-  const lastR = S.standings[S.standings.length - 1];
-  aw.push({ k: S.isCurrent ? 'Sacko watch' : 'Sacko', who: nm(lastR.rid), v: wl(lastR.wins, lastR.losses, lastR.ties), d: (S.isCurrent ? 'Last place so far · ' : 'Last place · ') + comma(lastR.pf) + ' PF', cls: 'down' });
+  const lastR = S.lastPlace != null ? S.st[S.lastPlace] : S.standings[S.standings.length - 1];
+  aw.push({ k: S.isCurrent ? 'Sacko watch' : 'Sacko', who: nm(lastR.rid), v: wl(lastR.wins, lastR.losses, lastR.ties),
+    d: (S.isCurrent ? 'Worst record so far · ' : S.toiletBowl ? 'Lost the toilet bowl · ' : 'Last place · ') + comma(lastR.pf) + ' PF', cls: 'down' });
   out.push(section(`<h2>Season awards</h2><div class="tiles">${aw.map(a => `<div class="tile"><span class="k ${a.cls}">${a.k}</span>
     <span style="font-size:15px;font-weight:600">${a.who}</span><span class="num" style="font-size:15px">${a.v}</span><span class="d">${a.d}</span></div>`).join('')}</div>`));
 
@@ -444,11 +448,50 @@ function bindCompare() {
   pa.addEventListener('change', go); pb.addEventListener('change', go);
 }
 
+// ---------- Stat search ----------
+let lastQuery = '';
+function searchForm(id, value) {
+  return `<form class="search" data-search role="search"><label class="sr" for="${id}">Ask a stat question</label>
+    <input id="${id}" name="q" type="search" autocomplete="off" enterkeyhint="search" placeholder="Try: vpcalv's highest scoring player week 7 2023" value="${esc(value)}">
+    <button type="submit" class="go">Search</button></form>`;
+}
+function runQuery(q) {
+  lastQuery = q;
+  try { sessionStorage.setItem('hof-q', q); } catch (e) { /* private mode */ }
+  if (!q.trim()) return '';
+  const P = parseQuery(q, M);
+  const html = answerQuery(M, P);
+  if (html) return html;
+  return `<div class="answer"><h2 class="ans-title">I couldn't tell what to look up.</h2>${HELP}</div>`;
+}
+function viewSearch() {
+  if (!lastQuery) { try { lastQuery = sessionStorage.getItem('hof-q') || ''; } catch (e) { /* ignore */ } }
+  return section(`<div class="eyebrow">${SEARCH_ICON} Stat search</div>
+    <h1>Ask the archive. <span class="soft">Any manager, season, week or player.</span></h1>
+    ${searchForm('search-q', lastQuery)}
+    <div class="chips">${EXAMPLES.map(x => `<button type="button" class="chip ex" data-q="${esc(x)}">${esc(x)}</button>`).join('')}</div>`, 'hero') +
+    section(`<div id="results" aria-live="polite">${lastQuery ? runQuery(lastQuery) : HELP}</div>`);
+}
+function bindSearch() {
+  document.querySelectorAll('form[data-search]').forEach(f => f.addEventListener('submit', e => {
+    e.preventDefault();
+    const q = f.q.value;
+    if (location.hash !== '#search') { lastQuery = q; try { sessionStorage.setItem('hof-q', q); } catch (err) { /* ignore */ } location.hash = 'search'; return; }
+    document.getElementById('results').innerHTML = runQuery(q);
+  }));
+  document.querySelectorAll('.chip.ex').forEach(b => b.addEventListener('click', () => {
+    const input = document.getElementById('search-q');
+    input.value = b.dataset.q;
+    document.getElementById('results').innerHTML = runQuery(b.dataset.q);
+  }));
+}
+
 // ---------- routing ----------
 function parse() {
   const h = decodeURIComponent(location.hash.replace(/^#/, ''));
   if (/^s\d{4}$/.test(h) && seasonOf(h.slice(1))) return { view: 'season', season: h.slice(1) };
   if (h.indexOf('m-') === 0) return { view: 'manager', id: h.slice(2) };
+  if (h === 'search') return { view: 'search' };
   if (h.indexOf('vs-') === 0) { const p = h.slice(3).split('~'); return { view: 'compare', a: p[0], b: p[1] }; }
   return { view: 'all' };
 }
@@ -468,12 +511,17 @@ function render() {
   } else if (route.view === 'manager') {
     $app.innerHTML = viewManager(route.id);
     document.title = M.nameOf(route.id) + ' · KSE Hall of Fame';
+  } else if (route.view === 'search') {
+    $app.innerHTML = viewSearch();
+    bindSearch();
+    document.title = 'Stat search · KSE Hall of Fame';
   } else if (route.view === 'compare') {
     $app.innerHTML = viewCompare(route.a, route.b);
     bindCompare();
     document.title = 'Compare · KSE Hall of Fame';
   } else {
     $app.innerHTML = viewAll();
+    bindSearch();
     document.title = 'KSE Hall of Fame';
   }
   const key = location.hash;

@@ -76,6 +76,8 @@ function buildSeason(raw, players, isNewest) {
   raw.picks.forEach(p => { if (p.pos) pickPos[p.player_id] = p.pos; });
   const posOf = id => positionOf(id) || pickPos[id] || '';
   const slots = raw.rosterPositions;
+  S.slots = slots.filter(s => ELIGIBLE[s]);
+  S.posOf = id => posOf(id);
 
   // Week-by-week lookups.
   const byWeek = {}; // week -> rid -> matchup entry
@@ -154,7 +156,12 @@ function buildSeason(raw, players, isNewest) {
   S.champion = final && final.w && raw.status === 'complete' ? final.w : null;
   S.runnerUp = final && final.l && raw.status === 'complete' ? final.l : null;
   S.finalists = final ? [final.t1, final.t2].filter(x => typeof x === 'number') : [];
-  S.lastPlace = raw.status === 'complete' && standings.length ? standings[standings.length - 1].rid : null;
+  // Last place = the toilet bowl loser. In Sleeper's losers bracket the team that loses each game
+  // moves on, so the "winner" of the final (p = 1) is last. Falls back to the worst record.
+  const toilet = (raw.losers || []).find(m => m.p === 1);
+  S.toiletBowl = !!(toilet && toilet.w);
+  S.lastPlace = raw.status === 'complete' && standings.length
+    ? (toilet && toilet.w ? toilet.w : standings[standings.length - 1].rid) : null;
 
   // Start/sit efficiency and bench blunders.
   const eff = {};
