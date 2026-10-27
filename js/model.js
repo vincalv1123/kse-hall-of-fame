@@ -320,16 +320,29 @@ function buildSeason(raw, players, isNewest) {
   const sc = { results: scale(results), startSit: scale(startSit), waivers: scale(waiv), trades: scale(trade), draft: scale(draft) };
   const W = CONFIG.weights;
   const wsum = W.results + W.startSit + W.waivers + W.trades + (hasDraft ? W.draft : 0);
+  // League average and spread for each raw stat, kept so profiles can show the math.
+  const rawSets = { results, startSit, waivers: waiv, trades: trade, draft };
+  S.scoreStats = {};
+  Object.keys(rawSets).forEach(k => { const xs = rids.map(r => rawSets[k][r]); S.scoreStats[k] = { mean: mean(xs), sd: sd(xs) }; });
+  S.hasDraft = hasDraft;
+  S.weightSum = wsum;
   const scores = {};
   rids.forEach(r => {
     let res = sc.results[r];
-    if (playoffRids.has(r) && raw.status === 'complete') res += CONFIG.bonus.playoffs;
-    if (S.finalists.indexOf(r) >= 0 && raw.status === 'complete') res += CONFIG.bonus.final;
-    if (S.champion === r) res += CONFIG.bonus.title;
-    res = Math.min(100, res);
+    let bonus = 0;
+    const bonusParts = [];
+    if (playoffRids.has(r) && raw.status === 'complete') { bonus += CONFIG.bonus.playoffs; bonusParts.push('playoffs +' + CONFIG.bonus.playoffs); }
+    if (S.finalists.indexOf(r) >= 0 && raw.status === 'complete') { bonus += CONFIG.bonus.final; bonusParts.push('final +' + CONFIG.bonus.final); }
+    if (S.champion === r) { bonus += CONFIG.bonus.title; bonusParts.push('title +' + CONFIG.bonus.title); }
+    res = Math.min(100, res + bonus);
     const parts = { results: res, startSit: sc.startSit[r], waivers: sc.waivers[r], trades: sc.trades[r], draft: hasDraft ? sc.draft[r] : null };
     const total = (W.results * parts.results + W.startSit * parts.startSit + W.waivers * parts.waivers + W.trades * parts.trades + (hasDraft ? W.draft * parts.draft : 0)) / wsum;
-    scores[r] = { total, parts, games: st[r].games };
+    scores[r] = {
+      total, parts, games: st[r].games,
+      raw: { results: results[r], startSit: startSit[r], waivers: waiv[r], trades: trade[r], draft: draft[r] },
+      scaled: { results: sc.results[r], startSit: sc.startSit[r], waivers: sc.waivers[r], trades: sc.trades[r], draft: sc.draft[r] },
+      bonus, bonusParts
+    };
   });
   S.scores = scores;
 

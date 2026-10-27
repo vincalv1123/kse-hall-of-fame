@@ -332,47 +332,156 @@ function startLive(S, week) {
 function stopLive() { if (liveTimer) { clearInterval(liveTimer); liveTimer = null; } }
 
 // ---------- Manager ----------
-function careerDetail(id) {
-  let ap = 0; let apg = 0; let draft = 0; let draftPicks = 0;
-  M.seasons.forEach(S => S.rids.forEach(r => {
-    if (S.ownerOf[r] !== id) return;
-    ap += S.st[r].allPlay; apg += S.st[r].allPlayGames;
-    draft += S.draftValue[r]; draftPicks += S.picks.filter(p => p.roster_id === r).length;
-  }));
-  return { allPlayPct: apg ? ap / apg : 0, draft, draftPicks };
+const PART_LABELS = { results: 'Results', startSit: 'Start/sit', waivers: 'Waivers', trades: 'Trades', draft: 'Draft' };
+
+// One manager's numbers for one season.
+function seasonStats(S, r) {
+  const st = S.st[r];
+  const weeks = [];
+  S.regWeeks.forEach(w => { const m = S.byWeek[w][r]; if (m) weeks.push({ season: S.season, w, pts: m.points }); });
+  const po = S.games.filter(g => g.playoff && (g.a === r || g.b === r));
+  po.forEach(g => weeks.push({ season: S.season, w: g.week, pts: g.a === r ? g.ap : g.bp, playoff: true }));
+  const poW = po.filter(g => (g.a === r ? g.ap > g.bp : g.bp > g.ap)).length;
+  const sorted = weeks.slice().sort((a, b) => b.pts - a.pts);
+  const finish = S.champion === r ? 'Champion' : S.runnerUp === r ? 'Runner-up' : S.lastPlace === r ? 'Last place'
+    : S.isCurrent ? 'In progress' : S.playoffRids.has(r) ? 'Made playoffs' : 'Missed playoffs';
+  return {
+    S, r, st, weeks, best: sorted[0], worst: sorted[sorted.length - 1], poW, poL: po.length - poW, finish,
+    eff: S.efficiency[r], waiv: S.waivers[r], trades: S.tradeNet[r], mvp: S.mvp[r], draftVal: S.draftValue[r],
+    picks: S.picks.filter(p => p.roster_id === r).length, score: S.scores[r]
+  };
 }
 
-function viewManager(id) {
+function managerSeasons(id) {
+  return M.seasons.map(S => { const r = S.rids.find(x => S.ownerOf[x] === id); return r == null ? null : seasonStats(S, r); }).filter(Boolean);
+}
+
+function tiles(list) {
+  return `<div class="tiles">${list.map(t => `<div class="tile"><span class="k">${t[0]}</span><span class="v" style="font-size:20px">${t[1]}</span>${t[2] ? `<span class="d">${t[2]}</span>` : ''}</div>`).join('')}</div>`;
+}
+
+const fmtRaw = (k, v) => k === 'results' ? pct3(v) : k === 'startSit' ? (v * 100).toFixed(1) + '%' : k === 'waivers' ? f1(v) + ' pts' : signed(v) + ' pts';
+
+function seasonCalc(x) {
+  const S = x.S; const sc = x.score; const W = CONFIG.weights;
+  const keys = ['results', 'startSit', 'waivers', 'trades'].concat(S.hasDraft ? ['draft'] : []);
+  const rows = keys.map(k => {
+    const stat = S.scoreStats[k];
+    const part = sc.parts[k];
+    return `<tr><td class="t" style="font-weight:500">${PART_LABELS[k]}</td><td>${fmtRaw(k, sc.raw[k])}</td><td style="color:#8A9C9F">${fmtRaw(k, stat.mean)}</td>
+      <td style="color:#8A9C9F">${k === 'results' ? stat.sd.toFixed(3) : k === 'startSit' ? (stat.sd * 100).toFixed(1) + '%' : f1(stat.sd)}</td>
+      <td>${f1(sc.scaled[k])}${k === 'results' && sc.bonus ? ' <span class="gold-t">+' + sc.bonus + '</span>' : ''}</td>
+      <td style="color:#8A9C9F">${Math.round(W[k] * 100)}%</td><td>${f1(W[k] * part / S.weightSum)}</td></tr>`;
+  }).join('');
+  return `<details class="calc"><summary>Show the calculation</summary><div class="calc-body">
+    <div class="scroll"><table class="table"><thead><tr><th>Part</th><th>Raw stat</th><th>League avg</th><th>Spread</th><th>Scaled</th><th>Weight</th><th>Adds</th></tr></thead>
+    <tbody>${rows}<tr><td class="t" style="font-weight:600">Total</td><td></td><td></td><td></td><td></td><td></td><td style="font-weight:600;color:#F1F4F3">${f1(sc.total)}</td></tr></tbody></table></div>
+    <ol class="steps">
+      <li><b>Raw stats.</b> Results = ½ × win % (${pct3(x.st.winPct)}) + ½ × all-play (${pct3(x.st.allPlayPct)}) = ${pct3(sc.raw.results)}. Start/sit = points started ÷ best possible lineup (${comma(x.eff.actual)} ÷ ${comma(x.eff.optimal)}). Waivers = starter points from pickups. Trades = starter points gained minus given up.${S.hasDraft ? ' Draft = points from your picks minus what picks near the same slots scored.' : ''}</li>
+      <li><b>Scaled.</b> 50 + 20 × (raw − league avg) ÷ spread, kept between 0 and 100. Spread is the standard deviation across all ${S.rids.length} teams that season.</li>
+      <li><b>Bonus.</b> ${sc.bonusParts.length ? 'Results got ' + sc.bonusParts.join(', ') + ' (capped at 100).' : 'No playoff, final or title bonus this season.'}${S.isCurrent ? ' Bonuses are added once the season ends.' : ''}</li>
+      <li><b>Score.</b> Each scaled part × its weight, divided by the total weight (${Math.round(S.weightSum * 100)}%) = <b>${f1(sc.total)}</b>.</li>
+    </ol></div></details>`;
+}
+
+function careerCalc(id, list) {
+  const c = M.career[id];
+  const rows = list.slice().sort((a, b) => Number(b.S.season) - Number(a.S.season));
+  const games = rows.reduce((s, x) => s + Math.max(1, x.score.games), 0);
+  return `<details class="calc"><summary>Show the calculation</summary><div class="calc-body">
+    <div class="scroll"><table class="table"><thead><tr><th>Season</th><th>Score</th><th>Games</th><th>Share</th><th>Adds</th></tr></thead><tbody>
+    ${rows.map(x => { const g = Math.max(1, x.score.games); return `<tr><td class="t" style="font-weight:500"><a href="${mlink(id)}@${x.S.season}" style="text-decoration:none">${x.S.season}</a>${x.S.isCurrent ? ' <span class="note">so far</span>' : ''}</td>
+      <td>${f1(x.score.total)}</td><td style="color:#8A9C9F">${g}</td><td style="color:#8A9C9F">${(g / games * 100).toFixed(0)}%</td><td>${f1(x.score.total * g / games)}</td></tr>`; }).join('')}
+    <tr><td class="t" style="font-weight:600">Career</td><td></td><td style="color:#8A9C9F">${games}</td><td></td><td style="font-weight:600;color:#F1F4F3">${f1(c.score)}</td></tr></tbody></table></div>
+    <ol class="steps"><li><b>Each season</b> gets its own score against that season's league (pick a year above to see its math).</li>
+    <li><b>Career</b> = each season's score × its games played, added up, ÷ total games. Seasons with more games count more, and the current season counts the games played so far.</li></ol></div></details>`;
+}
+
+function breakdown(title, parts) {
+  return `<h2>${title}</h2><div class="rows">${parts.map(p => `
+    <div class="row" style="grid-template-columns:1fr;gap:8px;padding:14px 0"><div class="line2"><span style="font-size:15px;font-weight:500">${p[0]} <span class="note">${Math.round(p[1] * 100)}%</span></span>
+    <span class="num" style="font-size:17px">${Math.round(p[2])}</span></div><span class="bar thick"><i style="width:${p[2]}%;background:${p[2] >= 65 ? GOLD : '#7E9093'}"></i></span>
+    <span class="note" style="color:#A3B2B4">${p[3]}</span></div>`).join('')}</div>`;
+}
+
+function viewManager(id, seasonSel) {
   const c = M.career[id];
   if (!c) return section('<h1>Manager not found.</h1><a class="btn" href="#all">Back to All-Time</a>', 'hero');
   const lb = M.leaderboard;
   const rank = lb.findIndex(x => x.id === id) + 1;
-  const det = careerDetail(id);
-  const seasonsPlayed = c.bySeason.length;
-  const completedPlayed = c.bySeason.filter(s => !s.current).length;
+  const list = managerSeasons(id);
+  const sel = seasonSel ? list.find(x => x.S.season === seasonSel) : null;
+  const completedPlayed = list.filter(x => !x.S.isCurrent).length;
   const tag = rank === 1 ? '<span class="tag gold">Best manager</span>' : rank === lb.length && lb.length > 1 ? '<span class="tag down">Worst manager</span>' : '';
-  const out = [];
-  out.push(section(`<div class="eyebrow">${tag}<span>#${rank} of ${lb.length} · ${seasonsPlayed} season${seasonsPlayed > 1 ? 's' : ''}</span></div>
-    <div class="line2" style="align-items:flex-end;gap:16px"><h1 style="min-width:0;overflow-wrap:anywhere">${name(id)}</h1>
-    <span style="display:flex;flex-direction:column;align-items:flex-end"><span class="num" style="font-size:52px;line-height:1;color:${rank === 1 ? GOLD : '#F1F4F3'}">${Math.round(c.score)}</span><span class="note">Career score</span></span></div>
-    ${M.managers[id].teamNames.length ? `<span class="note">Team names: ${M.managers[id].teamNames.map(esc).join(' · ')}</span>` : ''}
-    <div class="stats four dark-stats"><div><span>Titles</span><span>${c.titles}</span></div><div><span>Record</span><span>${wl(c.wins, c.losses, c.ties)}</span></div>
-    <div><span>Playoffs</span><span>${c.playoffs}/${completedPlayed}</span></div><div><span>Luck</span><span class="${sign(c.luck)}">${signed(c.luck)}</span></div></div>`, 'hero'));
-
   const W = CONFIG.weights;
-  const parts = [
-    ['Results', W.results, c.parts.results, `Win % ${pct3(c.winPct)} · all-play ${pct3(det.allPlayPct)}${c.titles ? ' · title bonus ×' + c.titles : ''}`],
-    ['Start/sit', W.startSit, c.parts.startSit, `Started ${(c.effPct * 100).toFixed(1)}% of best possible points · ${Math.round(c.benchLeft)} pts left on the bench`],
-    ['Waivers', W.waivers, c.parts.waivers, `${comma(c.waiverPts)} starter pts from pickups`],
-    ['Trades', W.trades, c.parts.trades, `${c.trades} trade${c.trades === 1 ? '' : 's'} · net ${signed(c.tradeNet)} starter pts`],
-    ['Draft', W.draft, c.parts.draft, `${det.draftPicks} picks · ${signed(det.draft, 0)} pts vs. what their draft slots usually produce`]
-  ].filter(p => p[2] != null);
-  out.push(section(`<h2>How the ${Math.round(c.score)} breaks down</h2><div class="rows">${parts.map(p => `
-    <div class="row" style="grid-template-columns:1fr;gap:8px;padding:14px 0"><div class="line2"><span style="font-size:15px;font-weight:500">${p[0]} <span class="note">${Math.round(p[1] * 100)}%</span></span>
-    <span class="num" style="font-size:17px">${Math.round(p[2])}</span></div><span class="bar thick"><i style="width:${p[2]}%;background:${p[2] >= 65 ? GOLD : '#7E9093'}"></i></span>
-    <span class="note" style="color:#A3B2B4">${p[3]}</span></div>`).join('')}</div>
-    <span class="note">50 = league average that season. The career score averages every season, weighted by games played.</span>`));
+  const out = [];
+  out.push(section(`<div class="eyebrow">${tag}<span>#${rank} of ${lb.length} · ${list.length} season${list.length > 1 ? 's' : ''}</span></div>
+    <div class="line2" style="align-items:flex-end;gap:16px"><h1 style="min-width:0;overflow-wrap:anywhere">${name(id)}</h1>
+    <span style="display:flex;flex-direction:column;align-items:flex-end"><span class="num" style="font-size:52px;line-height:1;color:${rank === 1 ? GOLD : '#F1F4F3'}">${Math.round(sel ? sel.score.total : c.score)}</span><span class="note">${sel ? sel.S.season + ' score' : 'Career score'}</span></span></div>
+    ${M.managers[id].teamNames.length ? `<span class="note">Team names: ${M.managers[id].teamNames.map(esc).join(' · ')}</span>` : ''}
+    <nav class="chips" aria-label="Choose a season" style="padding-top:6px"><a class="pill${sel ? '' : ' on'}" href="${mlink(id)}">Career</a>
+    ${list.map(x => `<a class="pill${sel === x ? ' on' : ''}" href="${mlink(id)}@${x.S.season}">${x.S.isCurrent ? '<span class="dot"></span>' : ''}${x.S.season}</a>`).join('')}</nav>`, 'hero'));
 
+  if (sel) {
+    const x = sel; const S = x.S; const st = x.st;
+    out.push(section(`<div class="head"><h2>${S.season} stats</h2><span class="note">${x.finish}${S.isCurrent ? ' · through Week ' + S.scoredThrough : ''}</span></div>` + tiles([
+      ['Record', wl(st.wins, st.losses, st.ties), ordinal(st.rank) + ' of ' + S.rids.length + ' in the standings'],
+      ['Points for', comma(st.pf), f1(st.games ? st.pf / st.games : 0) + ' per game'],
+      ['Points against', comma(st.pa), f1(st.games ? st.pa / st.games : 0) + ' per game'],
+      ['All-play', pct3(st.allPlayPct), f1(st.allPlay) + ' expected wins'],
+      ['Luck', `<span class="${sign(st.luck)}">${signed(st.luck)}</span>`, 'Wins above expected'],
+      ['Playoffs', x.poW + x.poL ? wl(x.poW, x.poL) : '—', x.finish],
+      ['Best week', x.best ? f2(x.best.pts) : '—', x.best ? 'Week ' + x.best.w + (x.best.playoff ? ' · playoffs' : '') : ''],
+      ['Worst week', x.worst ? f2(x.worst.pts) : '—', x.worst ? 'Week ' + x.worst.w : ''],
+      ['Start/sit', (x.eff.pct * 100).toFixed(1) + '%', Math.round(x.eff.benchLeft) + ' pts left on the bench'],
+      ['Waivers', x.waiv.adds + ' adds', f1(x.waiv.pts) + ' starter pts' + (S.usesFaab ? ' · $' + x.waiv.faab + ' FAAB' : '')],
+      ['Trades', String(x.trades.count), 'Net ' + signed(x.trades.net) + ' starter pts'],
+      ['Team MVP', x.mvp ? esc(M.playerName(x.mvp.pid)) : '—', x.mvp ? f1(x.mvp.pts) + ' starter pts' : '']
+    ])));
+    const sc = x.score;
+    const parts = [
+      ['Results', W.results, sc.parts.results, `Win % ${pct3(st.winPct)} · all-play ${pct3(st.allPlayPct)}${sc.bonusParts.length ? ' · bonus: ' + sc.bonusParts.join(', ') : ''}`],
+      ['Start/sit', W.startSit, sc.parts.startSit, `Started ${(x.eff.pct * 100).toFixed(1)}% of best possible points · ${Math.round(x.eff.benchLeft)} pts left on the bench`],
+      ['Waivers', W.waivers, sc.parts.waivers, `${f1(x.waiv.pts)} starter pts from ${x.waiv.adds} pickups${x.waiv.best && x.waiv.best.pts > 0 ? ' · best: ' + player(x.waiv.best.pid) + ' (' + f1(x.waiv.best.pts) + ')' : ''}`],
+      ['Trades', W.trades, sc.parts.trades, `${x.trades.count} trade${x.trades.count === 1 ? '' : 's'} · net ${signed(x.trades.net)} starter pts`],
+      ['Draft', W.draft, sc.parts.draft, `${x.picks} picks · ${signed(x.draftVal, 0)} pts vs. what picks near those slots scored`]
+    ].filter(p => p[2] != null);
+    out.push(section(breakdown(`How the ${S.season} ${Math.round(sc.total)} breaks down`, parts) + seasonCalc(x)));
+  } else {
+    let apSum = 0; let apG = 0; let draft = 0; let picks = 0; let adds = 0; let faab = 0; let faabSeasons = 0; let poW = 0; let poL = 0;
+    const weeks = [];
+    list.forEach(x => { apSum += x.st.allPlay; apG += x.st.allPlayGames; draft += x.draftVal; picks += x.picks; adds += x.waiv.adds; poW += x.poW; poL += x.poL;
+      if (x.S.usesFaab) { faab += x.waiv.faab; faabSeasons++; } weeks.push.apply(weeks, x.weeks); });
+    const sorted = weeks.slice().sort((a, b) => b.pts - a.pts);
+    const best = sorted[0]; const worst = sorted[sorted.length - 1];
+    out.push(section(`<div class="head"><h2>Career stats</h2><span class="note">${list.map(x => x.S.season).sort().join(', ')}</span></div>` + tiles([
+      ['Record', wl(c.wins, c.losses, c.ties), pct3(c.winPct) + ' win %'],
+      ['Titles', String(c.titles), c.finals + ' final' + (c.finals === 1 ? '' : 's') + ' · ' + c.playoffs + '/' + completedPlayed + ' playoffs'],
+      ['Points for', comma(c.pf), f1(c.ppg) + ' per game'],
+      ['Points against', comma(c.pa), f1(c.games ? c.pa / c.games : 0) + ' per game'],
+      ['All-play', pct3(apG ? apSum / apG : 0), f1(apSum) + ' expected wins'],
+      ['Luck', `<span class="${sign(c.luck)}">${signed(c.luck)}</span>`, 'Wins above expected'],
+      ['Playoff record', poW + poL ? wl(poW, poL) : '—', c.clutch != null ? 'Clutch ' + signed(c.clutch * 100) + '%' : ''],
+      ['Last places', String(c.lastPlaces), c.lastPlaces ? 'Toilet bowl losses' : 'Never lost the toilet bowl'],
+      ['Best week', best ? f2(best.pts) : '—', best ? best.season + ' · Week ' + best.w : ''],
+      ['Worst week', worst ? f2(worst.pts) : '—', worst ? worst.season + ' · Week ' + worst.w : ''],
+      ['Start/sit', (c.effPct * 100).toFixed(1) + '%', Math.round(c.benchLeft) + ' pts left on the bench'],
+      ['Waivers', adds + ' adds', comma(c.waiverPts) + ' starter pts' + (faabSeasons ? ' · $' + faab + ' FAAB' : '')],
+      ['Trades', String(c.trades), 'Net ' + signed(c.tradeNet) + ' starter pts'],
+      ['Draft', picks + ' picks', signed(draft, 0) + ' pts vs. their slots']
+    ])));
+    const parts = [
+      ['Results', W.results, c.parts.results, `Win % ${pct3(c.winPct)} · all-play ${pct3(apG ? apSum / apG : 0)}${c.titles ? ' · title bonus ×' + c.titles : ''}`],
+      ['Start/sit', W.startSit, c.parts.startSit, `Started ${(c.effPct * 100).toFixed(1)}% of best possible points · ${Math.round(c.benchLeft)} pts left on the bench`],
+      ['Waivers', W.waivers, c.parts.waivers, `${comma(c.waiverPts)} starter pts from ${adds} pickups`],
+      ['Trades', W.trades, c.parts.trades, `${c.trades} trade${c.trades === 1 ? '' : 's'} · net ${signed(c.tradeNet)} starter pts`],
+      ['Draft', W.draft, c.parts.draft, `${picks} picks · ${signed(draft, 0)} pts vs. what their draft slots usually produce`]
+    ].filter(p => p[2] != null);
+    out.push(section(breakdown(`How the ${Math.round(c.score)} breaks down`, parts) +
+      '<span class="note">50 = league average that season. Each part here is the games-weighted average of that part across seasons.</span>' + careerCalc(id, list)));
+  }
+
+  // By season: chart + cards (always shown).
   const seasons = c.bySeason.slice().sort((a, b) => Number(a.season) - Number(b.season));
   let chart = '';
   if (seasons.length >= 2) {
@@ -383,10 +492,10 @@ function viewManager(id) {
       <line x1="30" y1="${y(50)}" x2="320" y2="${y(50)}" stroke="#4A6168" stroke-dasharray="4 4"/><text x="320" y="${y(50) - 6}" fill="#8A9C9F" font-size="10" text-anchor="end">League avg 50</text>
       <polygon points="${pts} ${x(seasons.length - 1)},120 30,120" fill="${GOLD}" fill-opacity="0.10"/>
       <polyline points="${pts}" fill="none" stroke="${GOLD}" stroke-width="2.4" stroke-linejoin="round"/>
-      ${seasons.map((s, i) => `<circle cx="${x(i)}" cy="${y(s.score)}" r="3.5" fill="${GOLD}"/><text x="${x(i)}" y="140" fill="#8A9C9F" font-size="10" text-anchor="${i === 0 ? 'start' : i === seasons.length - 1 ? 'end' : 'middle'}">${s.season}</text>`).join('')}</svg>`;
+      ${seasons.map((s, i) => `<circle cx="${x(i)}" cy="${y(s.score)}" r="${sel && sel.S.season === s.season ? 5 : 3.5}" fill="${GOLD}"/><text x="${x(i)}" y="140" fill="#8A9C9F" font-size="10" text-anchor="${i === 0 ? 'start' : i === seasons.length - 1 ? 'end' : 'middle'}">${s.season}</text>`).join('')}</svg>`;
   }
   out.push(section(`<h2>By season</h2>${chart}<div class="cards" style="grid-template-columns:repeat(auto-fill,minmax(100px,1fr))">${seasons.slice().reverse().map(s => `
-    <a class="card" href="#s${s.season}"><span class="num note">${s.season}</span><span class="num" style="font-size:24px">${Math.round(s.score)}</span>
+    <a class="card${sel && sel.S.season === s.season ? ' sel' : ''}" href="${mlink(id)}@${s.season}"><span class="num note">${s.season}</span><span class="num" style="font-size:24px">${Math.round(s.score)}</span>
     <span class="note" style="${s.champion ? 'color:' + GOLD : ''}">${s.champion ? 'Champion' : s.runnerUp ? 'Runner-up' : s.last ? 'Last place' : s.current ? 'In progress · ' + ordinal(s.rank) : ordinal(s.rank) + ' · ' + wl(s.wins, s.losses, s.ties)}</span></a>`).join('')}</div>
     <a class="btn" href="#vs-${encodeURIComponent(id)}~${encodeURIComponent((lb.find(x => x.id !== id) || {}).id || id)}">Compare with another manager →</a>`));
   return out.join('');
@@ -490,7 +599,7 @@ function bindSearch() {
 function parse() {
   const h = decodeURIComponent(location.hash.replace(/^#/, ''));
   if (/^s\d{4}$/.test(h) && seasonOf(h.slice(1))) return { view: 'season', season: h.slice(1) };
-  if (h.indexOf('m-') === 0) return { view: 'manager', id: h.slice(2) };
+  if (h.indexOf('m-') === 0) { const p = h.slice(2).split('@'); return { view: 'manager', id: p[0], season: p[1] || null }; }
   if (h === 'search') return { view: 'search' };
   if (h.indexOf('vs-') === 0) { const p = h.slice(3).split('~'); return { view: 'compare', a: p[0], b: p[1] }; }
   return { view: 'all' };
@@ -509,7 +618,7 @@ function render() {
     if (v.liveWeek && v.liveWeek > S.scoredThrough) startLive(S, v.liveWeek);
     document.title = S.season + ' · KSE Hall of Fame';
   } else if (route.view === 'manager') {
-    $app.innerHTML = viewManager(route.id);
+    $app.innerHTML = viewManager(route.id, route.season);
     document.title = M.nameOf(route.id) + ' · KSE Hall of Fame';
   } else if (route.view === 'search') {
     $app.innerHTML = viewSearch();
@@ -524,7 +633,7 @@ function render() {
     bindSearch();
     document.title = 'KSE Hall of Fame';
   }
-  const key = location.hash;
+  const key = location.hash.split('@')[0];
   if (key !== lastRoute) { window.scrollTo(0, 0); lastRoute = key; }
 }
 

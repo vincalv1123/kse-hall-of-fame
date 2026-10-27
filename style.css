@@ -151,6 +151,20 @@ a.card:hover { background: var(--panel-2); }
 .pickers select.a { border-color: var(--gold); }
 .pickers .vs { font-size: 13px; color: var(--muted); padding-bottom: 13px; }
 
+/* Manager Score calculation dropdown */
+.calc { border: 1px solid var(--line); border-radius: 14px; margin-top: 4px; }
+.calc summary { cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: space-between; min-height: 48px; padding: 0 16px; font-size: 14px; font-weight: 500; }
+.calc summary::-webkit-details-marker { display: none; }
+.calc summary::after { content: ""; width: 8px; height: 8px; border-right: 2px solid var(--fg-2); border-bottom: 2px solid var(--fg-2); transform: rotate(45deg); margin-top: -4px; transition: transform .15s; }
+.calc[open] summary::after { transform: rotate(-135deg); margin-top: 4px; }
+.calc[open] summary { border-bottom: 1px solid var(--line); }
+.calc-body { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 14px; }
+.calc-body .table td, .calc-body .table th { white-space: nowrap; }
+.steps { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; line-height: 1.5; color: #A3B2B4; max-width: 65ch; }
+.steps b { color: var(--fg); font-weight: 500; }
+.card.sel { outline: 1px solid var(--gold); }
+.chips .pill { text-decoration: none; }
+
 /* Stat search */
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .search { display: flex; gap: 8px; margin-top: 6px; }
