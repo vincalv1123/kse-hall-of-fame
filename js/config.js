@@ -1,10 +1,14 @@
-// League setup. The site finds new seasons through this Sleeper account,
-// so if the commissioner account changes, update sleeperUsername.
+// League setup. Each league finds its new seasons through this Sleeper account,
+// so if the account changes, update sleeperUsername.
 export const CONFIG = {
-  leagueName: 'KSE Sleeper',
   sleeperUsername: 'vpcalv',
-  // Any season of the league works here; the site follows its history both ways.
-  leagueId: '1312006417497989120',
+
+  // Any season of a league works as leagueId; the site follows its history both ways.
+  // The first league is the default. `key` becomes the link prefix for every other league (#dynasty-…).
+  leagues: [
+    { key: 'redraft', name: 'KSE Sleeper', short: 'KSE Sleeper', leagueId: '1312006417497989120', format: 'redraft' },
+    { key: 'dynasty', name: 'Kse Dynasty III', short: 'Dynasty', leagueId: '1312005992099102720', format: 'dynasty' }
+  ],
 
   // Manager Score weights (must add up to 1).
   weights: { results: 0.35, startSit: 0.20, waivers: 0.15, trades: 0.20, draft: 0.10 },

@@ -1,6 +1,6 @@
 # KSE Hall of Fame
 
-A live hall of fame for the KSE Sleeper fantasy football league. Every page view pulls fresh data straight from Sleeper's public API, so standings, records and scores are always current, and each new season gets its own tab automatically.
+A live hall of fame for the KSE Sleeper and Kse Dynasty III fantasy football leagues, with a switch at the top for each. Every page view pulls fresh data straight from Sleeper's public API, so standings, records and scores are always current, and each new season gets its own tab automatically.
 
 **What's on it**
 - **All-Time:** trophy case, Wall of Shame, career Manager Score, single-game records, Luck Index, rivalries and trade heists, schedule swap, clutch rating and a head-to-head grid.
@@ -20,12 +20,14 @@ Each part is scored against the rest of the league that season (50 = average), t
 | Trades | 20% | Starter points gained minus starter points given up, rest of season |
 | Draft | 10% | How picks scored compared with picks around the same slot |
 
-The career score averages every season, weighted by games played. Change weights and other settings in `js/config.js`.
+The career score averages every season, weighted by games played.
+
+In the dynasty league, trades keep counting in later seasons for as long as the player stays on that team, and taxi-squad players are left out of the best-possible lineup. Change weights and other settings in `js/config.js`.
 
 ## Files
 
 - `index.html`, `style.css` — the page
-- `js/config.js` — league ID, Sleeper username, score weights
+- `js/config.js` — leagues (KSE Sleeper and Kse Dynasty III), Sleeper username, score weights
 - `js/data.js` — loading from Sleeper (finished seasons are cached in the visitor's browser)
 - `js/model.js` — all stats and scores
 - `js/app.js` — rendering and navigation

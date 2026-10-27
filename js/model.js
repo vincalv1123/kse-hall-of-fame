@@ -52,7 +52,7 @@ export function optimalPoints(slots, playerIds, pointsById, positionOf) {
   return total;
 }
 
-function buildSeason(raw, players, isNewest) {
+function buildSeason(raw, players, isNewest, later, format) {
   const S = {
     season: raw.season,
     leagueId: raw.leagueId,
@@ -63,7 +63,8 @@ function buildSeason(raw, players, isNewest) {
     scoredThrough: raw.scoredThrough,
     currentWeek: raw.currentWeek,
     usesFaab: raw.waiverType === 2,
-    isNewest
+    isNewest,
+    format
   };
   const ownerOf = {};
   raw.rosters.forEach(r => { ownerOf[r.roster_id] = r.owner_id || ('roster-' + raw.season + '-' + r.roster_id); });
@@ -163,6 +164,11 @@ function buildSeason(raw, players, isNewest) {
   S.lastPlace = raw.status === 'complete' && standings.length
     ? (toilet && toilet.w ? toilet.w : standings[standings.length - 1].rid) : null;
 
+  // Taxi-squad players can't be started, so they're left out of the best-possible lineup.
+  // Sleeper only keeps the end-of-season taxi squad, so that list is used for every week.
+  const taxi = {};
+  raw.rosters.forEach(r => { if (r.taxi && r.taxi.length) taxi[r.roster_id] = new Set(r.taxi); });
+
   // Start/sit efficiency and bench blunders.
   const eff = {};
   rids.forEach(r => { eff[r] = { actual: 0, optimal: 0, benchLeft: 0 }; });
@@ -175,7 +181,7 @@ function buildSeason(raw, players, isNewest) {
       const m = byWeek[w] && byWeek[w][r];
       if (!m) return;
       const actual = sum(m.starters.map(id => m.players_points[id] || 0));
-      const opt = optimalPoints(slots, m.players, m.players_points, posOf);
+      const opt = optimalPoints(slots, m.players.filter(p => !taxi[r] || !taxi[r].has(p) || m.starters.indexOf(p) >= 0), m.players_points, posOf);
       eff[r].actual += actual;
       eff[r].optimal += Math.max(opt, actual);
       const gap = Math.max(0, opt - actual);
@@ -206,6 +212,25 @@ function buildSeason(raw, players, isNewest) {
     return { pts, starts };
   }
 
+  // Dynasty: a traded player keeps paying off in later seasons while he stays on that manager's team.
+  function futurePoints(owner, pid) {
+    let pts = 0;
+    for (const L of later || []) {
+      const rr = L.rosters.find(x => x.owner_id === owner);
+      if (!rr) break;
+      let seen = false; let gone = false;
+      for (let w = 1; w <= L.scoredThrough && w <= L.playoffWeekStart + 2; w++) {
+        const m = (L.matchups[w - 1] || []).find(x => x.roster_id === rr.roster_id);
+        if (!m) continue;
+        if (m.players.indexOf(pid) < 0) { if (seen || w === 1) { gone = true; break; } continue; }
+        seen = true;
+        if (m.starters.indexOf(pid) >= 0) pts += m.players_points[pid] || 0;
+      }
+      if (gone || !seen) break;
+    }
+    return pts;
+  }
+
   // Waivers and free agents.
   const waivers = {};
   rids.forEach(r => { waivers[r] = { pts: 0, faab: 0, adds: 0, best: null }; });
@@ -234,6 +259,7 @@ function buildSeason(raw, players, isNewest) {
       const to = t.adds[pid];
       const from = t.drops[pid];
       const r = starterPointsFor(to, pid, t.leg);
+      if (format === 'dynasty') r.pts += futurePoints(ownerOf[to], pid);
       if (sides[to]) { sides[to].got.push({ pid, pts: r.pts }); sides[to].net += r.pts; }
       if (sides[from]) { sides[from].sent.push({ pid, pts: r.pts }); sides[from].net -= r.pts; }
     });
@@ -422,9 +448,10 @@ function simulateOdds(S, raw, byWeek, st) {
   return { byRid: out, remainingWeeks: lastReg - S.scoredThrough };
 }
 
-export function buildModel(data) {
+export function buildModel(data, format) {
   const players = data.players;
-  const seasons = data.seasons.map((raw, i) => buildSeason(raw, players, i === 0));
+  // data.seasons is newest first, so the seasons after season i are 0..i-1 (oldest first).
+  const seasons = data.seasons.map((raw, i) => buildSeason(raw, players, i === 0, data.seasons.slice(0, i).reverse(), format || 'redraft'));
   const managers = {};
   data.seasons.forEach(raw => {
     raw.rosters.forEach(r => {

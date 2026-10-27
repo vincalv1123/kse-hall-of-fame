@@ -1,14 +1,21 @@
-// Renders the Hall of Fame. Routes: #all, #s<season>, #m-<managerId>, #vs-<id>-<id>.
+// Renders the Hall of Fame. Routes: #all, #search, #s<season>, #m-<managerId>[@season], #vs-<id>~<id>.
+// Leagues after the first get a prefix: #dynasty-all, #dynasty-s2025, …
 
 import { CONFIG } from './config.js';
 import { loadAll, loadLiveWeek } from './data.js';
 import { buildModel } from './model.js';
-import { parse as parseQuery, answer as answerQuery, EXAMPLES, HELP } from './search.js';
+import { parse as parseQuery, answer as answerQuery, EXAMPLES, HELP, examplesFor } from './search.js';
 
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
 let M = null;
+let LG = CONFIG.leagues[0];
+let PX = '#';
 let liveTimer = null;
+const models = {};
+const loading = {};
+const $leagues = document.getElementById('leagues');
+const prefixFor = lg => (lg === CONFIG.leagues[0] ? '#' : '#' + lg.key + '-');
 
 // ---------- helpers ----------
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -19,7 +26,7 @@ const signed = (x, d = 1) => (x > 0 ? '+' : x < 0 ? '−' : '') + Math.abs(x).to
 const pct3 = x => x.toFixed(3).replace(/^0/, '');
 const wl = (w, l, t) => w + '–' + l + (t ? '–' + t : '');
 const name = id => esc(M.nameOf(id));
-const mlink = id => '#m-' + encodeURIComponent(id);
+const mlink = id => PX + 'm-' + encodeURIComponent(id);
 const sign = x => (x > 0 ? 'up' : x < 0 ? 'down' : '');
 const TROPHY = (color, size = 18) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4zM7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4"/></svg>`;
 const DOWN = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F0907A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"/></svg>';
@@ -34,8 +41,8 @@ const player = pid => esc(M.playerName(pid));
 
 // ---------- tabs ----------
 function renderTabs(route) {
-  const items = [`<a class="pill${route.view === 'all' ? ' on' : ''}" href="#all">All-Time</a>`, `<a class="pill${route.view === 'search' ? ' on' : ''}" href="#search">${SEARCH_ICON} Stat search</a>`]
-    .concat(M.seasons.map(s => `<a class="pill${route.view === 'season' && route.season === s.season ? ' on' : ''}" href="#s${s.season}">${s.isCurrent ? '<span class="dot"></span>' : ''}${s.season}</a>`));
+  const items = [`<a class="pill${route.view === 'all' ? ' on' : ''}" href="${PX}all">All-Time</a>`, `<a class="pill${route.view === 'search' ? ' on' : ''}" href="${PX}search">${SEARCH_ICON} Stat search</a>`]
+    .concat(M.seasons.map(s => `<a class="pill${route.view === 'season' && route.season === s.season ? ' on' : ''}" href="${PX}s${s.season}">${s.isCurrent ? '<span class="dot"></span>' : ''}${s.season}</a>`));
   $tabs.innerHTML = items.join('');
   const on = $tabs.querySelector('.on');
   if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' });
@@ -46,7 +53,7 @@ function viewAll() {
   const done = completed();
   const first = M.seasons.length ? M.seasons[M.seasons.length - 1].season : '';
   const out = [];
-  out.push(section(`<div class="eyebrow">${MARK} All-time archive · since ${first}</div>
+  out.push(section(`<div class="eyebrow">${MARK} ${esc(LG.name)} · all-time archive since ${first}</div>
     <h1>Every title, record and trade <span class="soft">since the league began.</span></h1>
     ${searchForm('home-q', '')}`, 'hero'));
 
@@ -65,7 +72,7 @@ function viewAll() {
 
   if (done.length) {
     out.push(section(`<h2>Trophy case</h2><div class="rows">${done.map(s => `
-      <a class="row r-trophy" href="#s${s.season}"><span class="year">${s.season}</span>
+      <a class="row r-trophy" href="${PX}s${s.season}"><span class="year">${s.season}</span>
       <span class="stack"><span class="name">${s.champion ? name(s.ownerOf[s.champion]) : '—'}</span>
       <span class="sub">Runner-up ${s.runnerUp ? name(s.ownerOf[s.runnerUp]) : '—'} · Last ${s.lastPlace ? name(s.ownerOf[s.lastPlace]) : '—'}</span></span>
       ${TROPHY(GOLD)}</a>`).join('')}</div>`));
@@ -107,7 +114,7 @@ function viewAll() {
   const riv = M.rivalry; const heist = M.heist;
   if (riv || heist) {
     let html = '<h2>Rivalries &amp; trades</h2>';
-    if (riv) html += `<a class="box" href="#vs-${encodeURIComponent(riv.a)}~${encodeURIComponent(riv.b)}" style="text-decoration:none">
+    if (riv) html += `<a class="box" href="${PX}vs-${encodeURIComponent(riv.a)}~${encodeURIComponent(riv.b)}" style="text-decoration:none">
       <span class="k note" style="text-transform:uppercase;letter-spacing:.05em;font-size:11px">Fiercest rivalry</span>
       <div class="line2"><span class="name" style="font-weight:600">${name(riv.a)} vs ${name(riv.b)}</span><span class="num">${wl(riv.aw, riv.bw, riv.t)}</span></div>
       <span class="note">${riv.games} games · average margin ${f1(riv.margin / riv.games)} pts${riv.playoff ? ' · ' + riv.playoff + ' playoff meeting' + (riv.playoff > 1 ? 's' : '') : ''}</span></a>`;
@@ -163,7 +170,7 @@ function viewAll() {
     out.push(section(`<div class="head"><h2>Head-to-head</h2><span class="note">Row's record vs. column</span></div>
       <div class="scroll"><table class="h2h"><thead>${head}</thead><tbody>${body}</tbody></table></div>
       <span class="note">Green = the row's manager owns that matchup. Includes playoff games.</span>
-      <a class="btn" href="#vs-${encodeURIComponent(ids[0])}~${encodeURIComponent(ids[1])}">Compare two managers →</a>`));
+      <a class="btn" href="${PX}vs-${encodeURIComponent(ids[0])}~${encodeURIComponent(ids[1])}">Compare two managers →</a>`));
   }
   return out.join('');
 }
@@ -406,7 +413,7 @@ function breakdown(title, parts) {
 
 function viewManager(id, seasonSel) {
   const c = M.career[id];
-  if (!c) return section('<h1>Manager not found.</h1><a class="btn" href="#all">Back to All-Time</a>', 'hero');
+  if (!c) return section(`<h1>Manager not found.</h1><a class="btn" href="${PX}all">Back to All-Time</a>`, 'hero');
   const lb = M.leaderboard;
   const rank = lb.findIndex(x => x.id === id) + 1;
   const list = managerSeasons(id);
@@ -497,7 +504,7 @@ function viewManager(id, seasonSel) {
   out.push(section(`<h2>By season</h2>${chart}<div class="cards" style="grid-template-columns:repeat(auto-fill,minmax(100px,1fr))">${seasons.slice().reverse().map(s => `
     <a class="card${sel && sel.S.season === s.season ? ' sel' : ''}" href="${mlink(id)}@${s.season}"><span class="num note">${s.season}</span><span class="num" style="font-size:24px">${Math.round(s.score)}</span>
     <span class="note" style="${s.champion ? 'color:' + GOLD : ''}">${s.champion ? 'Champion' : s.runnerUp ? 'Runner-up' : s.last ? 'Last place' : s.current ? 'In progress · ' + ordinal(s.rank) : ordinal(s.rank) + ' · ' + wl(s.wins, s.losses, s.ties)}</span></a>`).join('')}</div>
-    <a class="btn" href="#vs-${encodeURIComponent(id)}~${encodeURIComponent((lb.find(x => x.id !== id) || {}).id || id)}">Compare with another manager →</a>`));
+    <a class="btn" href="${PX}vs-${encodeURIComponent(id)}~${encodeURIComponent((lb.find(x => x.id !== id) || {}).id || id)}">Compare with another manager →</a>`));
   return out.join('');
 }
 const ordinal = n => n + (['th', 'st', 'nd', 'rd'][(n % 100 - 20) % 10] || ['th', 'st', 'nd', 'rd'][n % 100] || 'th');
@@ -553,20 +560,21 @@ function viewCompare(a, b) {
 function bindCompare() {
   const pa = document.getElementById('pickA'); const pb = document.getElementById('pickB');
   if (!pa) return;
-  const go = () => { location.hash = 'vs-' + encodeURIComponent(pa.value) + '~' + encodeURIComponent(pb.value); };
+  const go = () => { location.hash = PX.slice(1) + 'vs-' + encodeURIComponent(pa.value) + '~' + encodeURIComponent(pb.value); };
   pa.addEventListener('change', go); pb.addEventListener('change', go);
 }
 
 // ---------- Stat search ----------
 let lastQuery = '';
+const qKey = () => 'hof-q-' + LG.key;
 function searchForm(id, value) {
   return `<form class="search" data-search role="search"><label class="sr" for="${id}">Ask a stat question</label>
-    <input id="${id}" name="q" type="search" autocomplete="off" enterkeyhint="search" placeholder="Try: vpcalv's highest scoring player week 7 2023" value="${esc(value)}">
+    <input id="${id}" name="q" type="search" autocomplete="off" enterkeyhint="search" placeholder="Try: ${esc((LG === CONFIG.leagues[0] ? EXAMPLES : examplesFor(M))[0])}" value="${esc(value)}">
     <button type="submit" class="go">Search</button></form>`;
 }
 function runQuery(q) {
   lastQuery = q;
-  try { sessionStorage.setItem('hof-q', q); } catch (e) { /* private mode */ }
+  try { sessionStorage.setItem(qKey(), q); } catch (e) { /* private mode */ }
   if (!q.trim()) return '';
   const P = parseQuery(q, M);
   const html = answerQuery(M, P);
@@ -574,18 +582,18 @@ function runQuery(q) {
   return `<div class="answer"><h2 class="ans-title">I couldn't tell what to look up.</h2>${HELP}</div>`;
 }
 function viewSearch() {
-  if (!lastQuery) { try { lastQuery = sessionStorage.getItem('hof-q') || ''; } catch (e) { /* ignore */ } }
+  try { lastQuery = sessionStorage.getItem(qKey()) || lastQuery; } catch (e) { /* ignore */ }
   return section(`<div class="eyebrow">${SEARCH_ICON} Stat search</div>
     <h1>Ask the archive. <span class="soft">Any manager, season, week or player.</span></h1>
     ${searchForm('search-q', lastQuery)}
-    <div class="chips">${EXAMPLES.map(x => `<button type="button" class="chip ex" data-q="${esc(x)}">${esc(x)}</button>`).join('')}</div>`, 'hero') +
+    <div class="chips">${(LG === CONFIG.leagues[0] ? EXAMPLES : examplesFor(M)).map(x => `<button type="button" class="chip ex" data-q="${esc(x)}">${esc(x)}</button>`).join('')}</div>`, 'hero') +
     section(`<div id="results" aria-live="polite">${lastQuery ? runQuery(lastQuery) : HELP}</div>`);
 }
 function bindSearch() {
   document.querySelectorAll('form[data-search]').forEach(f => f.addEventListener('submit', e => {
     e.preventDefault();
     const q = f.q.value;
-    if (location.hash !== '#search') { lastQuery = q; try { sessionStorage.setItem('hof-q', q); } catch (err) { /* ignore */ } location.hash = 'search'; return; }
+    if (location.hash !== PX + 'search') { lastQuery = q; try { sessionStorage.setItem(qKey(), q); } catch (err) { /* ignore */ } location.hash = PX.slice(1) + 'search'; return; }
     document.getElementById('results').innerHTML = runQuery(q);
   }));
   document.querySelectorAll('.chip.ex').forEach(b => b.addEventListener('click', () => {
@@ -596,8 +604,16 @@ function bindSearch() {
 }
 
 // ---------- routing ----------
-function parse() {
+function leagueFromHash() {
   const h = decodeURIComponent(location.hash.replace(/^#/, ''));
+  for (const lg of CONFIG.leagues.slice(1)) {
+    if (h === lg.key) return { lg, rest: '' };
+    if (h.indexOf(lg.key + '-') === 0) return { lg, rest: h.slice(lg.key.length + 1) };
+  }
+  return { lg: CONFIG.leagues[0], rest: h };
+}
+
+function parse(h) {
   if (/^s\d{4}$/.test(h) && seasonOf(h.slice(1))) return { view: 'season', season: h.slice(1) };
   if (h.indexOf('m-') === 0) { const p = h.slice(2).split('@'); return { view: 'manager', id: p[0], season: p[1] || null }; }
   if (h === 'search') return { view: 'search' };
@@ -605,9 +621,47 @@ function parse() {
   return { view: 'all' };
 }
 
+function renderLeagues(active) {
+  if (!$leagues || CONFIG.leagues.length < 2) return;
+  $leagues.innerHTML = CONFIG.leagues.map(lg => `<a class="seg${lg === active ? ' on' : ''}" href="${prefixFor(lg)}all"${lg === active ? ' aria-current="page"' : ''}>${esc(lg.short || lg.name)}</a>`).join('');
+}
+
+function describe(m, lg) {
+  const cur = m.seasons[0];
+  if (!cur) return lg.name;
+  const sf = cur.slots && cur.slots.indexOf('SUPER_FLEX') >= 0 ? 'superflex ' : '';
+  return cur.rids.length + '-team ' + sf + (lg.format === 'dynasty' ? 'dynasty' : 'redraft');
+}
+
+function ensureModel(lg) {
+  if (models[lg.key]) return Promise.resolve(models[lg.key]);
+  if (!loading[lg.key]) {
+    loading[lg.key] = loadAll(lg, msg => { const el = document.getElementById('status'); if (el) el.textContent = msg; })
+      .then(data => { const m = buildModel(data, lg.format); m.px = prefixFor(lg); m.league = lg; models[lg.key] = m; return m; })
+      .catch(e => { delete loading[lg.key]; throw e; });
+  }
+  return loading[lg.key];
+}
+
 let lastRoute = '';
-function render() {
-  const route = parse();
+async function render() {
+  const { lg, rest } = leagueFromHash();
+  renderLeagues(lg);
+  if (!models[lg.key]) {
+    stopLive();
+    $tabs.innerHTML = '';
+    $app.innerHTML = `<div class="wrap status" id="status">Loading ${esc(lg.name)} from Sleeper…</div>`;
+    try { await ensureModel(lg); } catch (e) {
+      $app.innerHTML = `<div class="wrap status err">Couldn't load ${esc(lg.name)} from Sleeper. Check your connection and reload the page.<br><span class="note">${esc(e.message)}</span></div>`;
+      return;
+    }
+    if (leagueFromHash().lg !== lg) return; // the visitor switched again while this loaded
+  }
+  if (LG !== lg) lastQuery = '';
+  LG = lg; PX = prefixFor(lg); M = models[lg.key];
+  document.getElementById('meta').textContent = describe(M, lg);
+  const route = parse(rest);
+  const suffix = ' · ' + (lg === CONFIG.leagues[0] ? 'KSE Hall of Fame' : lg.short + ' · KSE Hall of Fame');
   stopLive();
   renderTabs(route);
   if (route.view === 'season') {
@@ -616,38 +670,26 @@ function render() {
     $app.innerHTML = v.html;
     bindPowerLegend(S, v.defaultHL);
     if (v.liveWeek && v.liveWeek > S.scoredThrough) startLive(S, v.liveWeek);
-    document.title = S.season + ' · KSE Hall of Fame';
+    document.title = S.season + suffix;
   } else if (route.view === 'manager') {
     $app.innerHTML = viewManager(route.id, route.season);
-    document.title = M.nameOf(route.id) + ' · KSE Hall of Fame';
+    document.title = M.nameOf(route.id) + suffix;
   } else if (route.view === 'search') {
     $app.innerHTML = viewSearch();
     bindSearch();
-    document.title = 'Stat search · KSE Hall of Fame';
+    document.title = 'Stat search' + suffix;
   } else if (route.view === 'compare') {
     $app.innerHTML = viewCompare(route.a, route.b);
     bindCompare();
-    document.title = 'Compare · KSE Hall of Fame';
+    document.title = 'Compare' + suffix;
   } else {
     $app.innerHTML = viewAll();
     bindSearch();
-    document.title = 'KSE Hall of Fame';
+    document.title = lg === CONFIG.leagues[0] ? 'KSE Hall of Fame' : lg.short + ' · KSE Hall of Fame';
   }
   const key = location.hash.split('@')[0];
   if (key !== lastRoute) { window.scrollTo(0, 0); lastRoute = key; }
 }
 
-async function start() {
-  const $status = document.getElementById('status');
-  try {
-    const data = await loadAll(msg => { if ($status) $status.textContent = msg; });
-    M = buildModel(data);
-    const cur = M.seasons[0];
-    document.getElementById('meta').textContent = cur && cur.rids ? cur.rids.length + '-team redraft' : CONFIG.leagueName;
-    window.addEventListener('hashchange', render);
-    render();
-  } catch (e) {
-    $app.innerHTML = `<div class="wrap status err">Couldn't load the league from Sleeper. Check your connection and reload the page.<br><span class="note">${esc(e.message)}</span></div>`;
-  }
-}
-start();
+window.addEventListener('hashchange', render);
+render();

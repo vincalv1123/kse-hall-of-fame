@@ -5,7 +5,7 @@
 import { CONFIG } from './config.js';
 
 const API = 'https://api.sleeper.app/v1';
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 
 async function get(path) {
   const res = await fetch(API + path);
@@ -42,23 +42,23 @@ async function loadPlayers() {
 
 // Find this season's league: start from the configured user, pick the league
 // whose history chain contains the configured league. New seasons appear automatically.
-async function findCurrentLeagueId(state) {
+async function findCurrentLeagueId(state, leagueId) {
   try {
     const user = await get('/user/' + CONFIG.sleeperUsername);
-    if (!user || !user.user_id) return CONFIG.leagueId;
+    if (!user || !user.user_id) return leagueId;
     for (const season of [state.season, String(Number(state.season) + 1)]) {
       const leagues = await get('/user/' + user.user_id + '/leagues/nfl/' + season);
       for (const lg of leagues || []) {
         let id = lg.league_id;
         for (let hops = 0; id && id !== '0' && hops < 20; hops++) {
-          if (id === CONFIG.leagueId) return lg.league_id;
+          if (id === leagueId) return lg.league_id;
           const prev = id === lg.league_id ? lg.previous_league_id : (await get('/league/' + id)).previous_league_id;
           id = prev;
         }
       }
     }
   } catch (e) { /* fall back below */ }
-  return CONFIG.leagueId;
+  return leagueId;
 }
 
 async function loadSeason(league, state, isCurrent) {
@@ -98,7 +98,7 @@ async function loadSeason(league, state, isCurrent) {
     scoredThrough,
     currentWeek: isCurrent ? state.week : null,
     users: users.map(u => ({ user_id: u.user_id, display_name: u.display_name, team_name: u.metadata && u.metadata.team_name, avatar: u.avatar })),
-    rosters: rosters.map(r => ({ roster_id: r.roster_id, owner_id: r.owner_id })),
+    rosters: rosters.map(r => ({ roster_id: r.roster_id, owner_id: r.owner_id, taxi: r.taxi || [] })),
     winners, losers,
     picks: (picks || []).map(p => ({ round: p.round, pick_no: p.pick_no, player_id: p.player_id, roster_id: p.roster_id, picked_by: p.picked_by, pos: p.metadata && p.metadata.position })),
     matchups: matchups.map(week => (week || []).map(m => ({
@@ -112,9 +112,9 @@ async function loadSeason(league, state, isCurrent) {
   };
 }
 
-export async function loadAll(onProgress) {
+export async function loadAll(league, onProgress) {
   const state = await get('/state/nfl');
-  const currentId = await findCurrentLeagueId(state);
+  const currentId = await findCurrentLeagueId(state, league.leagueId);
   const chain = [];
   let id = currentId;
   while (id && id !== '0' && chain.length < 30) {

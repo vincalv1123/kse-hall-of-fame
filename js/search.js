@@ -11,6 +11,24 @@ export const EXAMPLES = [
   'Josh Allen points for kthugger 2024'
 ];
 
+// Example questions built from a league's own managers and seasons.
+export function examplesFor(M) {
+  const S = M.seasons.find(s => !s.isCurrent) || M.seasons[0];
+  if (!S || M.leaderboard.length < 2) return EXAMPLES;
+  const a = M.leaderboard[0].id; const b = M.leaderboard[1].id;
+  const an = M.nameOf(a); const bn = M.nameOf(b);
+  const wk = n => Math.max(1, Math.min(n, S.scoredThrough));
+  const rid = S.rids.find(r => S.ownerOf[r] === a);
+  const mvp = rid != null && S.mvp[rid] ? M.playerName(S.mvp[rid].pid) : null;
+  return [
+    `${an}'s highest scoring player week ${wk(3)} ${S.season}`,
+    `Who scored the most in week 1 ${S.season}?`,
+    `${bn} lineup week ${wk(5)} ${S.season}`,
+    `${an} vs ${bn}`,
+    `${an} ${S.season} season`
+  ].concat(mvp ? [`${mvp} points for ${an} ${S.season}`] : []);
+}
+
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const f2 = x => (Math.round((x || 0) * 100) / 100).toFixed(2);
 const wl = (w, l, t) => w + '–' + l + (t ? '–' + t : '');
@@ -26,9 +44,9 @@ function managerIndex(M) {
   return list;
 }
 
-let playerIdx = null;
+const playerIdxCache = new WeakMap();
 function playerIndex(M) {
-  if (playerIdx) return playerIdx;
+  if (playerIdxCache.has(M)) return playerIdxCache.get(M);
   const seen = new Set();
   M.seasons.forEach(S => Object.values(S.byWeek).forEach(week => Object.values(week).forEach(m => m.players.forEach(p => seen.add(p)))));
   const full = []; const lastCount = {};
@@ -41,8 +59,9 @@ function playerIndex(M) {
     full.push({ pid, lower, last });
     lastCount[last] = (lastCount[last] || 0) + 1;
   });
-  playerIdx = { full, lastCount };
-  return playerIdx;
+  const idx = { full, lastCount };
+  playerIdxCache.set(M, idx);
+  return idx;
 }
 
 export function parse(q, M) {
@@ -145,7 +164,7 @@ function needWeek(M, P, S) {
 
 export function answer(M, P) {
   const name = id => esc(M.nameOf(id));
-  const link = id => `<a href="#m-${encodeURIComponent(id)}">${name(id)}</a>`;
+  const link = id => `<a href="${M.px}m-${encodeURIComponent(id)}">${name(id)}</a>`;
   const assumed = !P.season && P.week ? M.seasons.find(s => played(s, P.week)) : null;
   const S0 = P.season ? M.seasons.find(s => s.season === P.season) : assumed;
   const assumeNote = !P.season && P.week && S0 ? note(`No season given, so this is ${S0.season}. Add a year to pick another season.`) : '';
@@ -160,7 +179,7 @@ export function answer(M, P) {
       note(`${r.games} games · average margin ${f2(r.margin)} pts${r.playoff ? ' · ' + r.playoff + ' in the playoffs' : ''}.`) +
       `<div class="scroll"><table class="table"><thead><tr><th>Game</th><th>${name(a)}</th><th>${name(b)}</th></tr></thead><tbody>
       ${games.map(g => `<tr><td class="t" style="font-weight:400">${g.season} · Week ${g.week}${g.playoff ? ' · playoffs' : ''}</td><td style="${g.mine > g.theirs ? 'color:#F1F4F3;font-weight:500' : 'color:#8A9C9F'}">${f2(g.mine)}</td><td style="${g.theirs > g.mine ? 'color:#F1F4F3;font-weight:500' : 'color:#8A9C9F'}">${f2(g.theirs)}</td></tr>`).join('')}</tbody></table></div>` +
-      `<a class="btn" href="#vs-${encodeURIComponent(a)}~${encodeURIComponent(b)}">Full comparison →</a>`);
+      `<a class="btn" href="${M.px}vs-${encodeURIComponent(a)}~${encodeURIComponent(b)}">Full comparison →</a>`);
   }
 
   const id = P.managers[0];
@@ -259,11 +278,11 @@ export function answer(M, P) {
       return card(`${link(id)} in ${S.season}: ${wl(st.wins, st.losses, st.ties)}, ${ordinal(st.rank)} place${S.champion === r ? ', champion' : S.lastPlace === r ? ', last place' : ''}.`,
         `<div class="tiles"><div class="tile"><span class="k">Points for</span><span class="v">${f2(st.pf)}</span></div><div class="tile"><span class="k">Manager Score</span><span class="v">${Math.round(S.scores[r].total)}</span></div>
         <div class="tile"><span class="k">Team MVP</span><span class="w">${mvp ? esc(M.playerName(mvp.pid)) + ' · ' + f2(mvp.pts) : '—'}</span></div><div class="tile"><span class="k">Start/sit</span><span class="v">${(S.efficiency[r].pct * 100).toFixed(1)}%</span></div></div>` +
-        `<a class="btn" href="#s${S.season}">Open the ${S.season} tab →</a>`);
+        `<a class="btn" href="${M.px}s${S.season}">Open the ${S.season} tab →</a>`);
     }
     const c = M.career[id];
     return card(`${link(id)}: ${wl(c.wins, c.losses, c.ties)} career, ${c.titles} title${c.titles === 1 ? '' : 's'}, Manager Score ${Math.round(c.score)}.`,
-      note('Add a season or week for more detail, like "' + esc(M.nameOf(id)) + ' week 3 2025".') + `<a class="btn" href="#m-${encodeURIComponent(id)}">Open their profile →</a>`);
+      note('Add a season or week for more detail, like "' + esc(M.nameOf(id)) + ' week 3 2025".') + `<a class="btn" href="${M.px}m-${encodeURIComponent(id)}">Open their profile →</a>`);
   }
 
   // No manager: league-wide week or season
