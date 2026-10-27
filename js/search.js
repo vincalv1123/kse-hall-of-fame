@@ -2,8 +2,12 @@
 // season, week and player it is about, and answers from the league data.
 // Rule-based, so it understands the question shapes listed in EXAMPLES and HELP.
 
+import { parseRank, rankAnswer } from './rank.js';
+
 export const EXAMPLES = [
   "vpcalv's highest scoring player week 7 2023",
+  'Best season ever by manager score',
+  'Worst 1st round pick by points per game',
   'Who scored the most in week 1 2026?',
   'J00NE lineup week 10 2025',
   'SeanWrong10 vs kthugger',
@@ -22,6 +26,8 @@ export function examplesFor(M) {
   const mvp = rid != null && S.mvp[rid] ? M.playerName(S.mvp[rid].pid) : null;
   return [
     `${an}'s highest scoring player week ${wk(3)} ${S.season}`,
+    'Best season ever by manager score',
+    'Worst 1st round pick by points per game',
     `Who scored the most in week 1 ${S.season}?`,
     `${bn} lineup week ${wk(5)} ${S.season}`,
     `${an} vs ${bn}`,
@@ -114,6 +120,7 @@ export function parse(q, M) {
     (out.managers.length >= 2 && /\b(vs|v|versus|against|h2h|head to head|head-to-head)\b/.test(t)) || (out.managers.length >= 2 && !out.week) ? 'h2h' :
     /\b(lowest|worst|fewest|least)\b/.test(t) && /\b(player|starter|scorer|guy)\b/.test(t) ? 'lowPlayer' :
     /\b(highest|top|best|most|leading|mvp)\b/.test(t) && /\b(player|scorer|guy|mvp|performer)\b/.test(t) ? 'topPlayer' :
+    /\b(waivers?|pickups?|picked up|adds|free agents?|faab)\b/.test(t) ? 'waivers' :
     /\bbench\b/.test(t) ? 'bench' :
     /\b(lineup|starters|started|start|roster)\b/.test(t) ? 'lineup' :
     /\b(draft|drafted|picks|picked)\b/.test(t) ? 'draft' :
@@ -121,6 +128,7 @@ export function parse(q, M) {
     /\b(lowest|worst|fewest)\b/.test(t) ? 'lowScore' :
     /\b(highest|most|top|best)\b/.test(t) ? 'topScore' :
     out.players.length ? 'player' : 'summary';
+  out.rank = parseRank(text);
   return out;
 }
 
@@ -182,7 +190,24 @@ export function answer(M, P) {
       `<a class="btn" href="${M.px}vs-${encodeURIComponent(a)}~${encodeURIComponent(b)}">Full comparison →</a>`);
   }
 
+  // Rankings across seasons ("best season ever by manager score", "worst 1st round pick by ppg")
+  if (!P.week && P.rank) { const r = rankAnswer(M, P, P.rank); if (r) return r; }
+
   const id = P.managers[0];
+
+  // Waiver and free-agent pickups
+  if (id && P.intent === 'waivers') {
+    const list = seasonList(M, P).filter(S => ridOf(S, id) != null);
+    const S = list[0];
+    if (!S) return card(`${name(id)} wasn't in the league${P.season ? ' in ' + P.season : ''}.`);
+    const w = S.waivers[ridOf(S, id)];
+    const adds = (w.list || []).slice().sort((a, b) => b.pts - a.pts);
+    if (!adds.length) return card(`${name(id)} made no pickups in ${S.season}.`);
+    return card(`${link(id)} made ${adds.length} pickups in ${S.season} for ${f2(w.pts)} starter pts${S.usesFaab ? ' and $' + w.faab + ' FAAB' : ''}.`,
+      `<div class="scroll"><table class="table"><thead><tr><th>Player</th><th>Week</th>${S.usesFaab ? '<th>Bid</th>' : ''}<th>Starts</th><th>Starter pts</th></tr></thead><tbody>
+      ${adds.slice(0, 25).map(a => `<tr><td class="t" style="font-weight:400">${esc(M.playerName(a.pid))} <span class="note">${esc(S.posOf(a.pid))}</span></td><td>${a.week}</td>${S.usesFaab ? `<td>${a.bid ? '$' + a.bid : 'FA'}</td>` : ''}<td>${a.starts}</td><td>${f2(a.pts)}</td></tr>`).join('')}</tbody></table></div>` +
+      (adds.length > 25 ? note('Showing the 25 best of ' + adds.length + '.') : '') + (P.season ? '' : note('Showing ' + S.season + '. Add a year for another season.')));
+  }
 
   // One manager, one week
   if (id && P.week) {
@@ -319,8 +344,9 @@ const ordinal = n => { const s = ['th', 'st', 'nd', 'rd']; const v = n % 100; re
 export const HELP = `<p class="lead">Name a manager, a player, a season and a week in any order. It understands questions like:</p>
 <ul class="help">
 <li><b>A manager's week:</b> lineup, highest- or lowest-scoring player, bench points</li>
-<li><b>A manager's season or career:</b> record, best score, best starter, draft, trades</li>
+<li><b>A manager's season or career:</b> record, best score, best starter, draft, trades, waiver pickups</li>
 <li><b>Two managers:</b> head-to-head record and every game</li>
 <li><b>A player:</b> points for a manager, or every team he played for</li>
 <li><b>A week or season:</b> highest or lowest score, every matchup</li>
+<li><b>Rankings, all-time or for one year:</b> best/worst <i>seasons</i> by Manager Score, wins, points or luck; <i>managers</i> by titles, clutch or start/sit; <i>draft picks</i> by round, position, points per game or value; <i>trades</i>; <i>pickups</i>; <i>player games</i> and <i>player seasons</i>; <i>scores</i> in a win or loss; <i>blowouts</i> and <i>closest games</i></li>
 </ul>`;

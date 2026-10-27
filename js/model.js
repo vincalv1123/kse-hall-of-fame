@@ -241,6 +241,7 @@ function buildSeason(raw, players, isNewest, later, format) {
       const r = starterPointsFor(rid, pid, t.leg);
       waivers[rid].pts += r.pts;
       waivers[rid].adds++;
+      (waivers[rid].list = waivers[rid].list || []).push({ pid, pts: r.pts, starts: r.starts, week: t.leg, bid: t.type === 'waiver' ? t.bid : null, type: t.type });
       if (t.type === 'waiver' && t.bid) waivers[rid].faab += t.bid;
       if (!waivers[rid].best || r.pts > waivers[rid].best.pts) waivers[rid].best = { pid, pts: r.pts, starts: r.starts, week: t.leg };
     });
