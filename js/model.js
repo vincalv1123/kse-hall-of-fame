@@ -427,10 +427,44 @@ function simulateOdds(S, raw, byWeek, st) {
     Object.values(byWeek[w] || {}).forEach(m => { if (m.matchup_id != null) (groups[m.matchup_id] = groups[m.matchup_id] || []).push(m.roster_id); });
     Object.values(groups).forEach(g => { if (g.length === 2) future.push(g); });
   }
-  const made = {}; const top = {};
-  rids.forEach(r => { made[r] = 0; top[r] = 0; });
+  const made = {}; const top = {}; const titles = {}; const finals = {};
+  rids.forEach(r => { made[r] = 0; top[r] = 0; titles[r] = 0; finals[r] = 0; });
   const N = CONFIG.simulations;
   function normal() { let u = 0; let v = 0; while (u === 0) u = Math.random(); while (v === 0) v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+  const play = (a, b) => {
+    if (a == null) return b; if (b == null) return a;
+    return params[a].m + params[a].s * normal() > params[b].m + params[b].s * normal() ? a : b;
+  };
+  // Standard single elimination with byes for the top seeds (6 teams: 1 and 2 get byes, 3v6 and 4v5).
+  function seedOrder(size) { let o = [1]; while (o.length < size) { const n = o.length * 2; o = [].concat.apply([], o.map(x => [x, n + 1 - x])); } return o; }
+  function bracketFromSeeds(seeds) {
+    let size = 1; while (size < seeds.length) size *= 2;
+    let field = seedOrder(size).map(k => seeds[k - 1]);
+    let finalists = null;
+    while (field.length > 1) {
+      if (field.length === 2) finalists = field.slice();
+      const next = [];
+      for (let i = 0; i < field.length; i += 2) next.push(play(field[i], field[i + 1]));
+      field = next;
+    }
+    return { champ: field[0], finalists: finalists || field };
+  }
+  // Once the playoffs start, play out Sleeper's real bracket and keep games already decided.
+  const bracketLive = S.scoredThrough >= lastReg && (raw.winners || []).some(m => typeof m.t1 === 'number');
+  function bracketFromSleeper() {
+    const res = {};
+    const matches = raw.winners.filter(m => !m.p || m.p === 1).slice().sort((a, b) => a.r - b.r || a.m - b.m);
+    let champ = null; let finalists = null;
+    matches.forEach(m => {
+      const side = (t, from) => (typeof t === 'number' ? t : from ? (from.w != null ? (res[from.w] || {}).w : (res[from.l] || {}).l) : null);
+      const a = side(m.t1, m.t1_from); const b = side(m.t2, m.t2_from);
+      const week = raw.playoffWeekStart + m.r - 1;
+      let w; if (m.w && week <= S.scoredThrough) w = m.w; else w = play(a, b);
+      res[m.m] = { w, l: w === a ? b : a };
+      if (m.p === 1) { champ = w; finalists = [a, b]; }
+    });
+    return { champ, finalists: finalists || [] };
+  }
   for (let i = 0; i < N; i++) {
     const wins = {}; const pf = {};
     rids.forEach(r => { wins[r] = st[r].wins + st[r].ties / 2; pf[r] = st[r].pf; });
@@ -441,12 +475,16 @@ function simulateOdds(S, raw, byWeek, st) {
       if (sa > sb) wins[a]++; else wins[b]++;
     });
     const order = rids.slice().sort((a, b) => wins[b] - wins[a] || pf[b] - pf[a]);
-    order.slice(0, S.playoffTeams).forEach(r => { made[r]++; });
+    const seeds = order.slice(0, S.playoffTeams);
+    seeds.forEach(r => { made[r]++; });
     top[order[0]]++;
+    const out = bracketLive ? bracketFromSleeper() : bracketFromSeeds(seeds);
+    if (out.champ != null) titles[out.champ]++;
+    out.finalists.forEach(r => { if (r != null) finals[r]++; });
   }
   const out = {};
-  rids.forEach(r => { out[r] = { playoffs: made[r] / N, first: top[r] / N }; });
-  return { byRid: out, remainingWeeks: lastReg - S.scoredThrough };
+  rids.forEach(r => { out[r] = { playoffs: bracketLive ? (S.playoffRids.has(r) ? 1 : 0) : made[r] / N, first: top[r] / N, title: titles[r] / N, final: finals[r] / N }; });
+  return { byRid: out, remainingWeeks: Math.max(0, lastReg - S.scoredThrough), bracketLive };
 }
 
 export function buildModel(data, format) {
