@@ -293,7 +293,52 @@ function powerChart(S, highlight) {
     <g stroke="#1F3237" stroke-width="1"><line x1="24" y1="${y(1)}" x2="340" y2="${y(1)}"/><line x1="24" y1="${y(mid)}" x2="340" y2="${y(mid)}"/><line x1="24" y1="${y(n)}" x2="340" y2="${y(n)}"/></g>
     <g fill="#8A9C9F" font-size="10"><text x="0" y="${y(1) + 3.5}">1</text><text x="0" y="${y(mid) + 3.5}">${mid}</text><text x="0" y="${y(n) + 3.5}">${n}</text>
     <text x="${x(0)}" y="224" text-anchor="middle">W1</text><text x="${x(midW - 1)}" y="224" text-anchor="middle">W${midW}</text><text x="340" y="224" text-anchor="end">W${weeks}</text></g>
-    ${base}${top}</svg></div>`;
+    ${base}${top}
+    <polyline id="phover" fill="none" stroke="#F1F4F3" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round" points="" pointer-events="none"/>
+    <g class="ppts">${S.rids.map(r => S.power[r].map((rk, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(rk).toFixed(1)}" r="5" data-rid="${r}" data-i="${i}" tabindex="-1"/>`).join('')).join('')}</g>
+    <circle id="pdot" r="4" fill="#F1F4F3" stroke="#0C171A" stroke-width="1.5" pointer-events="none" style="display:none"/>
+    </svg></div><div class="ptip" id="ptip" hidden></div>`;
+}
+
+// Hover (or tap) a point on the power rankings chart to see that team's week: rank, total PF, that week's score.
+function powerWeekData(S) {
+  if (S._powerData) return S._powerData;
+  const out = {};
+  S.rids.forEach(r => { let cum = 0; out[r] = S.regWeeks.map(w => { const p = S.byWeek[w][r] ? S.byWeek[w][r].points : 0; cum += p; return { w, p, cum }; }); });
+  S._powerData = out;
+  return out;
+}
+function bindPowerHover(S) {
+  const box = document.getElementById('power');
+  if (!box || box.dataset.hover) return;
+  box.dataset.hover = '1';
+  const data = powerWeekData(S);
+  const show = c => {
+    const svg = box.querySelector('svg'); const tip = document.getElementById('ptip');
+    if (!svg || !tip) return;
+    const r = Number(c.dataset.rid); const i = Number(c.dataset.i);
+    const d = data[r][i]; const rank = S.power[r][i];
+    const prev = i > 0 ? S.power[r][i - 1] : null;
+    const move = prev == null || prev === rank ? '' : prev > rank ? ` <span class="up">▲${prev - rank}</span>` : ` <span class="down">▼${rank - prev}</span>`;
+    tip.innerHTML = `<b>${name(S.ownerOf[r])}</b><span>Week ${d.w}</span><span>Rank <b class="num">${rank}</b>${move} · PF <b class="num">${comma(d.cum)}</b></span><span>Scored <b class="num">${f2(d.p)}</b> that week</span>`;
+    tip.hidden = false;
+    const pts = S.power[r].map((rk, k) => { const cc = svg.querySelector(`circle[data-rid="${r}"][data-i="${k}"]`); return cc.getAttribute('cx') + ',' + cc.getAttribute('cy'); }).join(' ');
+    svg.querySelector('#phover').setAttribute('points', pts);
+    const dot = svg.querySelector('#pdot'); dot.setAttribute('cx', c.getAttribute('cx')); dot.setAttribute('cy', c.getAttribute('cy')); dot.style.display = '';
+    const br = box.getBoundingClientRect(); const cr = c.getBoundingClientRect();
+    const left = Math.min(Math.max(cr.left - br.left + cr.width / 2 - tip.offsetWidth / 2, 0), br.width - tip.offsetWidth);
+    let top = cr.top - br.top - tip.offsetHeight - 10; if (top < 0) top = cr.bottom - br.top + 10;
+    tip.style.left = left + 'px'; tip.style.top = top + 'px';
+  };
+  const hide = () => {
+    const tip = document.getElementById('ptip'); if (tip) tip.hidden = true;
+    const svg = box.querySelector('svg'); if (!svg) return;
+    const h = svg.querySelector('#phover'); if (h) h.setAttribute('points', '');
+    const dot = svg.querySelector('#pdot'); if (dot) dot.style.display = 'none';
+  };
+  box.addEventListener('pointerover', e => { const c = e.target.closest('circle[data-rid]'); if (c) show(c); });
+  box.addEventListener('click', e => { const c = e.target.closest('circle[data-rid]'); if (c) show(c); else hide(); });
+  box.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') hide(); });
 }
 
 // Series history between this week's opponents (games before this week).
@@ -414,7 +459,7 @@ function viewSeason(S) {
     <div id="power" data-season="${S.season}">${powerChart(S, defaultHL)}</div>
     <div class="legend" id="power-legend">${S.standings.map(s => `<button type="button" data-rid="${s.rid}" aria-pressed="${defaultHL.indexOf(s.rid) >= 0}">
       <i style="background:${defaultHL.indexOf(s.rid) >= 0 ? HL[defaultHL.indexOf(s.rid)] : '#3B5258'}"></i>${nm(s.rid)}</button>`).join('')}</div>
-    <span class="note">Tap names to highlight up to five teams.</span>`));
+    <span class="note">Hover or tap a point to see that week's rank, total PF and score. Tap names to highlight up to five teams.</span>`));
 
   const ranked = S.rids.slice().sort((a, b) => S.scores[b].total - S.scores[a].total);
   const best = ranked[0]; const worst = ranked[ranked.length - 1];
@@ -431,6 +476,8 @@ function viewSeason(S) {
   const aw = seasonAwards(S).filter(x => SEASON_TILE_AWARDS.indexOf(x.key) >= 0).map(x => ({ ...x, who: nm(x.rid) }));
   out.push(section(`<h2>Season awards</h2><div class="tiles">${aw.map(a => `<div class="tile"><span class="k ${a.cls}">${a.k}</span>
     <span style="font-size:15px;font-weight:600">${a.who}</span><span class="num" style="font-size:15px">${a.v}</span><span class="d">${a.d}</span></div>`).join('')}</div>`));
+
+  if (S.picks.length && LG.format !== 'dynasty') out.push(section(teamGradesSection(S, draftTeamGrades(S), S.season + ' draft grades') + `<a class="btn" href="${PX}drafts@${S.season}">Full ${S.season} draft →</a>`));
 
   if (S.trades.length) {
     out.push(section(`<div class="head"><h2>Trades</h2><span class="note">${S.trades.length} trade${S.trades.length > 1 ? 's' : ''} · ${LG.format === 'dynasty' ? 'starter pts since, all seasons' : 'starter pts for the rest of the season'}</span></div>
@@ -452,6 +499,7 @@ function viewSeason(S) {
 }
 
 function bindPowerLegend(S, initial) {
+  bindPowerHover(S);
   const legend = document.getElementById('power-legend');
   if (!legend) return;
   let hl = initial.slice();
@@ -462,6 +510,7 @@ function bindPowerLegend(S, initial) {
     const i = hl.indexOf(rid);
     if (i >= 0) hl.splice(i, 1); else { if (hl.length >= HL.length) hl.shift(); hl.push(rid); }
     document.getElementById('power').innerHTML = powerChart(S, hl);
+    bindPowerHover(S);
     legend.querySelectorAll('button').forEach(b => {
       const r = Number(b.dataset.rid); const k = hl.indexOf(r);
       b.setAttribute('aria-pressed', String(k >= 0));
@@ -845,6 +894,30 @@ function viewPlayoffs() {
 const GRADE_COLORS = { A: '#5FC79B', B: '#9FD8B8', C: '#C9D3D2', D: '#F2B59E', F: '#F0907A' };
 function gradeOf(z) { return z >= 1 ? 'A' : z >= 0.33 ? 'B' : z >= -0.33 ? 'C' : z >= -1 ? 'D' : 'F'; }
 
+// Team draft grades: total value of each team's picks, scored against the other teams (A–F).
+function draftTeamGrades(S) {
+  const teams = S.rids.map(r => {
+    const picks = S.picks.filter(p => p.roster_id === r);
+    const total = picks.reduce((t, p) => t + p.value, 0);
+    const best = picks.slice().sort((a, b) => b.value - a.value)[0];
+    return { r, picks, total, best };
+  });
+  const xs = teams.map(t => t.total); const m = xs.reduce((a, b) => a + b, 0) / xs.length;
+  const sdv = Math.sqrt(xs.reduce((a, b) => a + (b - m) * (b - m), 0) / Math.max(1, xs.length - 1)) || 1;
+  teams.forEach(t => { t.grade = gradeOf((t.total - m) / sdv); });
+  return teams.sort((a, b) => b.total - a.total);
+}
+function teamGradesSection(S, teams, title) {
+  const nm = r => name(S.ownerOf[r]);
+  return `<div class="head"><h2>${title || 'Team grades'}</h2><span class="note">Positional value vs. what each pick number usually produces${S.isCurrent ? ', so far' : ''}</span></div>
+    <div class="rows">${teams.map(t => `<button type="button" class="row rowbtn" data-draft-team="${S.season}:${t.r}" style="grid-template-columns:40px minmax(0,1fr) auto">
+      <span class="grade" style="background:${GRADE_COLORS[t.grade]}">${t.grade}</span>
+      <span class="stack"><span class="name" style="font-size:15px">${nm(t.r)}</span><span class="sub">${t.best ? 'Best pick: ' + player(t.best.player_id) + ' (R' + t.best.round + ')' : 'No picks'}</span></span>
+      <span class="num ${sign(t.total)}" style="font-size:15px">${signed(t.total, 0)}</span></button>`).join('')}</div>
+    <span class="note">Tap a team to see its whole draft with a grade for every pick.</span>
+    <span class="note">Each pick is worth its points above a replacement-level starter at its position (${Object.entries(S.replacement).map(([p, x]) => p + x.rank).join(', ')}), compared with what that pick number usually produces across this league's drafts. A late QB who scores a lot but barely beats the replacement QB isn't rated above a late RB who became a starter. Misses count more in early rounds (1.5× in round 1) and less in late ones (0.4× in the last); hits count in full. Grades compare each team's total with the rest of the league: A is a standout draft, C is about average, F is far below.</span>`;
+}
+
 function viewDrafts(seasonSel) {
   const withPicks = M.seasons.filter(S => S.picks.length);
   if (!withPicks.length) return section('<h1>No drafts on record.</h1>', 'hero');
@@ -856,46 +929,101 @@ function viewDrafts(seasonSel) {
   const sincePts = pid => later.reduce((t, x) => t + (x.playerPts[pid] || 0), 0);
   const showGrades = LG.format !== 'dynasty';
 
-  // Team grades: total value of a team's picks, scored against the other teams.
-  const teams = S.rids.map(r => {
-    const picks = S.picks.filter(p => p.roster_id === r);
-    const total = picks.reduce((t, p) => t + p.value, 0);
-    const best = picks.slice().sort((a, b) => b.value - a.value)[0];
-    return { r, picks, total, best };
-  });
-  const xs = teams.map(t => t.total); const m = xs.reduce((a, b) => a + b, 0) / xs.length;
-  const sdv = Math.sqrt(xs.reduce((a, b) => a + (b - m) * (b - m), 0) / Math.max(1, xs.length - 1)) || 1;
-  teams.forEach(t => { t.grade = gradeOf((t.total - m) / sdv); });
-  teams.sort((a, b) => b.total - a.total);
+  const teams = draftTeamGrades(S);
 
   const out = [];
   out.push(section(`<div class="eyebrow">Draft history${S.isCurrent ? ' · season in progress' : ''}</div>
     <h1>${S.season} draft. <span class="soft">${showGrades ? nm(teams[0].r) + ' drafted best, ' + nm(teams[teams.length - 1].r) + ' worst.' : 'Every pick, round by round.'}</span></h1>
     <nav class="chips" aria-label="Choose a draft">${withPicks.map(x => `<a class="pill${x === S ? ' on' : ''}" href="${PX}drafts@${x.season}">${x.season}</a>`).join('')}</nav>`, 'hero'));
 
-  if (showGrades) out.push(section(`<div class="head"><h2>Team grades</h2><span class="note">Positional value vs. picks near the same slots${S.isCurrent ? ', so far' : ''}</span></div>
-    <div class="rows">${teams.map(t => `<a class="row" href="${mlink(S.ownerOf[t.r])}@${S.season}" style="grid-template-columns:40px minmax(0,1fr) auto">
-      <span class="grade" style="background:${GRADE_COLORS[t.grade]}">${t.grade}</span>
-      <span class="stack"><span class="name" style="font-size:15px">${nm(t.r)}</span><span class="sub">${t.best ? 'Best pick: ' + player(t.best.player_id) + ' (R' + t.best.round + ')' : 'No picks'}</span></span>
-      <span class="num ${sign(t.total)}" style="font-size:15px">${signed(t.total, 0)}</span></a>`).join('')}</div>
-    <span class="note">Each pick is worth its points above a replacement-level starter at its position (${Object.entries(S.replacement).map(([p, x]) => p + x.rank).join(', ')}), compared with what picks near the same slot were worth. A late QB who scores a lot but barely beats the replacement QB isn't rated above a late RB who became a starter. Grades compare each team's total with the rest of the league: A is a standout draft, C is about average, F is far below.</span>`));
+  if (showGrades) out.push(section(teamGradesSection(S, teams)));
+
+  if (!showGrades) out.push(section(`<h2>Team drafts</h2><div class="chips">${teams.slice().sort((a, b) => M.nameOf(S.ownerOf[a.r]).localeCompare(M.nameOf(S.ownerOf[b.r]))).map(t =>
+    `<button type="button" class="chip ex" data-draft-team="${S.season}:${t.r}">${nm(t.r)}</button>`).join('')}</div><span class="note">Tap a team to see its whole draft.</span>`));
 
   const rounds = [...new Set(S.picks.map(p => p.round))].sort((a, b) => a - b);
   out.push(section(`<h2>Round by round</h2>${rounds.map(rd => {
     const picks = S.picks.filter(p => p.round === rd).sort((a, b) => a.pick_no - b.pick_no);
     const best = picks.slice().sort((a, b) => b.value - a.value)[0];
-    const worst = picks.slice().sort((a, b) => a.value - b.value)[0];
+    const worst = rd < 10 ? picks.slice().sort((a, b) => a.value - b.value)[0] : null;
     return `<details class="calc round"${rd <= 2 ? ' open' : ''}><summary>Round ${rd}<span class="note" style="font-weight:400;margin-left:auto;margin-right:12px">Best: ${player(best.player_id)}</span></summary><div class="calc-body" style="padding-top:4px">
-      <div class="scroll"><table class="table"><thead><tr><th>Pick</th><th style="text-align:left">Player</th><th>Pts</th><th>Finish</th><th>Above repl.</th>${dynasty ? '<th>Since</th>' : ''}<th>vs. slot</th></tr></thead><tbody>
+      <div class="scroll"><table class="table"><thead><tr><th>Pick</th><th style="text-align:left">Player</th><th>Pts</th><th>Drafted</th><th>Finish</th><th>Above repl.</th>${dynasty ? '<th>Since</th>' : ''}<th>vs. slot</th></tr></thead><tbody>
       ${picks.map(p => `<tr><td class="rk" style="width:auto">${p.round}.${String(((p.pick_no - 1) % n) + 1).padStart(2, '0')}</td>
         <td class="t"><span style="display:flex;flex-direction:column;gap:2px"><span>${player(p.player_id)} <span class="note">${esc(p.pos)}</span>${p === best ? ' <span class="tag up">Best</span>' : p === worst ? ' <span class="tag down">Worst</span>' : ''}</span>
-        <a class="note" href="${mlink(S.ownerOf[p.roster_id])}" style="text-decoration:none;font-weight:400">${nm(p.roster_id)}</a></span></td>
-        <td>${f1(p.pts)}</td><td style="color:#C9D3D2">${S.posRank[p.player_id] ? esc(p.pos) + S.posRank[p.player_id] : '—'}</td><td>${signed(p.vor, 0)}</td>${dynasty ? `<td style="color:#C9D3D2">${f1(sincePts(p.player_id))}</td>` : ''}
+        <button type="button" class="linkbtn note" data-draft-team="${S.season}:${p.roster_id}">${nm(p.roster_id)}</button></span></td>
+        <td>${f1(p.pts)}</td><td style="color:#C9D3D2">${esc(p.pos)}${p.posDrafted}</td><td style="color:#C9D3D2">${S.posRank[p.player_id] ? esc(p.pos) + S.posRank[p.player_id] : '—'}${finishMove(p, S)}</td><td>${signed(p.vor, 0)}</td>${dynasty ? `<td style="color:#C9D3D2">${f1(sincePts(p.player_id))}</td>` : ''}
         <td class="${sign(p.value)}">${signed(p.value, 0)}</td></tr>`).join('')}</tbody></table></div></div></details>`;
   }).join('')}
-    <span class="note">Pts = regular-season points that year. Finish = rank at his position among rostered players. Above repl. = points above the replacement-level starter at his position. vs. slot = above repl. minus what picks near that slot averaged.${dynasty ? ' Since = regular-season points in every season after this draft, for any team.' : ''}</span>`));
+    <span class="note">Pts = regular-season points that year. Drafted = when his position came off the board (WR1 = first WR taken). Finish = rank at his position among rostered players, with ▲/▼ vs. where he was drafted. Above repl. = points above the replacement-level starter at his position. vs. slot = above repl. minus what that pick number usually produces across this league's drafts; misses count 1.5× in round 1 sliding to 0.4× in the last round. Worst tags only go to rounds 1–9.${dynasty ? ' Since = regular-season points in every season after this draft, for any team.' : ''}</span>`));
   return out.join('');
 }
+
+// Finish vs. draft position: ▲ beat it, ▼ fell short (e.g. drafted WR1, finished WR3 = ▼2).
+function finishMove(p, S) {
+  const f = S.posRank[p.player_id];
+  if (!f || !p.posDrafted || f === p.posDrafted) return '';
+  return f < p.posDrafted ? ` <span class="up">▲${p.posDrafted - f}</span>` : ` <span class="down">▼${f - p.posDrafted}</span>`;
+}
+
+// ---------- team draft pop-up ----------
+// Each pick's grade compares its value vs. slot with every other pick in that draft (A = top, C = about average).
+function openDraftTeam(season, rid) {
+  const S = seasonOf(season);
+  if (!S) return;
+  const n = S.rids.length;
+  const showGrades = LG.format !== 'dynasty';
+  const later = M.seasons.filter(x => Number(x.season) > Number(S.season));
+  const sincePts = pid => later.reduce((t, x) => t + (x.playerPts[pid] || 0), 0);
+  const all = S.picks.map(p => p.value);
+  const m = all.reduce((a, b) => a + b, 0) / all.length;
+  const sdv = Math.sqrt(all.reduce((a, b) => a + (b - m) * (b - m), 0) / Math.max(1, all.length - 1)) || 1;
+  const picks = S.picks.filter(p => p.roster_id === rid).sort((a, b) => a.pick_no - b.pick_no);
+  const total = picks.reduce((t, p) => t + p.value, 0);
+  const teamTotals = S.rids.map(r => S.picks.filter(p => p.roster_id === r).reduce((t, p) => t + p.value, 0));
+  const tm = teamTotals.reduce((a, b) => a + b, 0) / teamTotals.length;
+  const tsd = Math.sqrt(teamTotals.reduce((a, b) => a + (b - tm) * (b - tm), 0) / Math.max(1, teamTotals.length - 1)) || 1;
+  const teamGrade = gradeOf((total - tm) / tsd);
+  const rank = teamTotals.slice().sort((a, b) => b - a).indexOf(total) + 1;
+  const best = picks.slice().sort((a, b) => b.value - a.value)[0];
+  const worst = picks.filter(p => p.round < 10).sort((a, b) => a.value - b.value)[0];
+  const id = S.ownerOf[rid];
+  let dlg = document.getElementById('draft-modal');
+  if (!dlg) {
+    dlg = document.createElement('dialog');
+    dlg.id = 'draft-modal';
+    dlg.className = 'modal wide';
+    dlg.setAttribute('aria-labelledby', 'draft-title');
+    document.body.appendChild(dlg);
+    dlg.addEventListener('click', e => { if (e.target === dlg || e.target.closest('[data-close]')) dlg.close(); });
+  }
+  const showSince = LG.format === 'dynasty' && later.length;
+  dlg.innerHTML = `<div class="modal-card">
+    <div class="line2" style="align-items:center"><h2 id="draft-title" style="font-size:18px">${name(id)} · ${S.season} draft</h2>
+      <button type="button" class="close" data-close aria-label="Close">✕</button></div>
+    <div class="line2" style="align-items:center;justify-content:flex-start;gap:12px">
+      ${showGrades ? `<span class="grade" style="background:${GRADE_COLORS[teamGrade]}">${teamGrade}</span>` : ''}
+      <span class="stack"><span style="font-size:14px">${showGrades ? ordinal(rank) + ' of ' + n + ' teams · ' : ''}<span class="${sign(total)} num">${signed(total, 0)}</span> vs. slot${S.isCurrent ? ' so far' : ''}</span>
+      <span class="sub">Best: ${best ? player(best.player_id) + ' (R' + best.round + ')' : '—'} · Worst (R1–9): ${worst ? player(worst.player_id) + ' (R' + worst.round + ')' : '—'}</span></span></div>
+    <div class="scroll"><table class="table"><thead><tr><th>Pick</th><th style="text-align:left">Player</th><th>Pts</th><th>Drafted</th><th>Finish</th><th>Above repl.</th>${showSince ? '<th>Since</th>' : ''}<th>vs. slot</th>${showGrades ? '<th>Grade</th>' : ''}</tr></thead><tbody>
+    ${picks.map(p => { const g = gradeOf((p.value - m) / sdv);
+      return `<tr><td class="rk" style="width:auto">${p.round}.${String(((p.pick_no - 1) % n) + 1).padStart(2, '0')}</td>
+        <td class="t">${player(p.player_id)} <span class="note">${esc(p.pos)}</span></td>
+        <td>${f1(p.pts)}</td><td style="color:#C9D3D2">${esc(p.pos)}${p.posDrafted}</td><td style="color:#C9D3D2">${S.posRank[p.player_id] ? esc(p.pos) + S.posRank[p.player_id] : '—'}${finishMove(p, S)}</td><td>${signed(p.vor, 0)}</td>
+        ${showSince ? `<td style="color:#C9D3D2">${f1(sincePts(p.player_id))}</td>` : ''}<td class="${sign(p.value)}">${signed(p.value, 0)}</td>
+        ${showGrades ? `<td><span class="grade sm" style="background:${GRADE_COLORS[g]}">${g}</span></td>` : ''}</tr>`; }).join('')}</tbody></table></div>
+    <p class="note" style="margin:0">${showGrades ? 'Each pick is graded against every pick in the ' + S.season + ' draft: A is a standout pick for its slot, C is about what that slot usually gives, F is far below. ' : ''}vs. slot = points above a replacement-level starter at his position, minus what that pick number usually produces across this league's drafts. Misses count more early (1.5× in round 1) and less late (0.4× in the last round); hits count in full. Drafted = when his position came off the board; Finish = where he ended up.</p>
+    <a class="btn" href="${mlink(id)}@${S.season}" data-close>Open ${name(id)}'s ${S.season} profile →</a>
+  </div>`;
+  if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+  const c = dlg.querySelector('.close'); if (c) c.focus();
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-draft-team]');
+  if (!b) return;
+  e.preventDefault();
+  const [season, rid] = b.dataset.draftTeam.split(':');
+  openDraftTeam(season, Number(rid));
+});
 
 // ---------- Awards history ----------
 const AWARD_ORDER = ['champion', 'runnerUp', 'regSeason', 'bestMgr', 'waiver', 'trade', 'steal', 'highScore', 'luckiest', 'worstMgr', 'bust', 'unluckiest', 'blunder', 'sacko'];
