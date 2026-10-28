@@ -2,7 +2,7 @@
 // Leagues after the first get a prefix: #dynasty-all, #dynasty-s2025, …
 
 import { CONFIG } from './config.js';
-import { loadAll, loadLiveWeek } from './data.js';
+import { loadAll, loadLiveWeek, clearSavedSeasons } from './data.js';
 import { buildModel } from './model.js';
 import { parse as parseQuery, answer as answerQuery, EXAMPLES, HELP, examplesFor } from './search.js';
 
@@ -1199,5 +1199,29 @@ async function render() {
   if (key !== lastRoute) { window.scrollTo(0, 0); lastRoute = key; }
 }
 
+
+// ---------- refresh button ----------
+const $refresh = document.getElementById('refresh');
+function setRefresh(state) {
+  if (!$refresh) return;
+  const label = $refresh.querySelector('.refresh-label');
+  $refresh.hidden = false;
+  $refresh.disabled = state === 'busy';
+  $refresh.classList.toggle('spin', state === 'busy');
+  label.textContent = state === 'busy' ? 'Refreshing…' : state === 'error' ? 'Try again' : 'Refresh';
+  $refresh.title = state === 'done' ? 'Updated ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + ' · pull everything from Sleeper again' : 'Pull everything from Sleeper again';
+}
+if ($refresh) $refresh.addEventListener('click', async () => {
+  setRefresh('busy');
+  clearSavedSeasons();
+  Object.keys(models).forEach(k => { delete models[k]; });
+  Object.keys(loading).forEach(k => { delete loading[k]; });
+  const y = window.scrollY;
+  await render();
+  const ok = !!models[leagueFromHash().lg.key];
+  if (ok) window.scrollTo(0, y);
+  setRefresh(ok ? 'done' : 'error');
+});
+
 window.addEventListener('hashchange', render);
-render();
+render().then(() => setRefresh('idle'));
