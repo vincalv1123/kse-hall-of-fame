@@ -223,3 +223,29 @@ svg text { font-family: var(--mono); }
   .tag.live .dot { animation: pulse 1.6s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity: 0.3; } }
 }
+
+
+/* Playoff brackets */
+.pgame { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; font-size: 14px; }
+.pgame .num { font-size: 14px; }
+.pgame .note.num { font-size: 11px; margin-right: 4px; }
+.pgame .lead-t { font-weight: 600; color: var(--fg); }
+.pgame .trail-t { color: var(--muted); }
+
+/* ---------- Desktop: sidebar navigation (phones and small screens keep the layout above) ---------- */
+.tabs-label { display: none; }
+@media (min-width: 1024px) {
+  .top .wrap { max-width: 1240px; }
+  .layout { display: grid; grid-template-columns: 236px minmax(0, 1fr); max-width: 1240px; margin: 0 auto; }
+  .side { position: sticky; top: 0; align-self: start; max-height: 100vh; overflow-y: auto; margin: 0; max-width: none;
+    padding-block: 20px 32px; padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: 16px; border-right: 1px solid var(--line); }
+  .side .leagues { margin-top: 0; max-width: none; grid-auto-flow: row; grid-auto-columns: auto; border-radius: 14px; }
+  .side .seg { justify-content: flex-start; border-radius: 10px; }
+  .side .tabs { flex-direction: column; overflow: visible; padding-block: 18px 0; gap: 2px; }
+  .side .pill { border: 0; border-radius: 10px; padding: 10px 12px; font-size: 14px; color: var(--fg-2); }
+  .side .pill:hover { background: var(--panel); color: var(--fg); }
+  .side .pill.on { background: var(--paper); color: var(--ink); }
+  .side .tabs-label { display: block; margin: 18px 12px 6px; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  .content { min-width: 0; }
+  .content .wrap { max-width: 900px; padding-left: 40px; padding-right: 40px; }
+}

@@ -132,8 +132,9 @@ document.addEventListener('click', e => {
 
 // ---------- tabs ----------
 function renderTabs(route) {
-  const items = [`<a class="pill${route.view === 'all' ? ' on' : ''}" href="${PX}all">All-Time</a>`, `<a class="pill${route.view === 'search' ? ' on' : ''}" href="${PX}search">${SEARCH_ICON} Stat search</a>`,
+  const items = [`<a class="pill${route.view === 'all' ? ' on' : ''}" href="${PX}all">All-Time</a>`, `<a class="pill${route.view === 'playoffs' ? ' on' : ''}" href="${PX}playoffs">Playoffs</a>`, `<a class="pill${route.view === 'search' ? ' on' : ''}" href="${PX}search">${SEARCH_ICON} Stat search</a>`,
     `<a class="pill${route.view === 'drafts' ? ' on' : ''}" href="${PX}drafts">Drafts</a>`, `<a class="pill${route.view === 'awards' ? ' on' : ''}" href="${PX}awards">Awards</a>`]
+    .concat(['<span class="tabs-label" aria-hidden="true">Seasons</span>'])
     .concat(M.seasons.map(s => `<a class="pill${route.view === 'season' && route.season === s.season ? ' on' : ''}" href="${PX}s${s.season}">${s.isCurrent ? '<span class="dot"></span>' : ''}${s.season}</a>`));
   $tabs.innerHTML = items.join('');
   const on = $tabs.querySelector('.on');
@@ -744,6 +745,102 @@ function bindCompare() {
   pa.addEventListener('change', go); pb.addEventListener('change', go);
 }
 
+// ---------- Playoffs ----------
+function byeCountFor(S) { let n = 1; while (n < S.playoffTeams) n *= 2; return n - S.playoffTeams; }
+const ROUND_NAMES = (total, r) => (r === total ? 'Final' : r === total - 1 ? 'Semifinals' : r === total - 2 ? 'Quarterfinals' : 'Round ' + r);
+
+function viewPlayoffs() {
+  const done = completed();
+  const out = [];
+  out.push(section(`<div class="eyebrow">${TROPHY(GOLD, 13)} Playoff history</div>
+    <h1>Every bracket, every year. <span class="soft">Who shows up when it counts.</span></h1>`, 'hero'));
+
+  // Career playoff table.
+  const P = {};
+  const row = id => (P[id] = P[id] || { id, apps: 0, byes: 0, w: 0, l: 0, pts: 0, games: 0, finals: 0, titles: 0, regPts: 0, regGames: 0 });
+  done.forEach(S => {
+    const byes = byeCountFor(S);
+    S.playoffRids.forEach(r => { const x = row(S.ownerOf[r]); x.apps++; if (S.st[r].rank <= byes) x.byes++; });
+    S.finalists.forEach(r => { row(S.ownerOf[r]).finals++; });
+    if (S.champion) row(S.ownerOf[S.champion]).titles++;
+    S.games.filter(g => g.playoff).forEach(g => [[g.a, g.ap, g.bp], [g.b, g.bp, g.ap]].forEach(([r, mine, theirs]) => {
+      const x = row(S.ownerOf[r]); x.games++; x.pts += mine; if (mine > theirs) x.w++; else if (mine < theirs) x.l++;
+    }));
+  });
+  Object.values(P).forEach(x => { const c = M.career[x.id]; x.regPpg = c ? c.ppg : 0; });
+  const rows = Object.values(P).map(x => ({ name: name(x.id), href: mlink(x.id), wl: wl(x.w, x.l),
+    tag: x.titles ? ` <span class="note gold-t">${'★'.repeat(Math.min(x.titles, 5))}</span>` : '',
+    v: { apps: x.apps, byes: x.byes, wins: x.games ? x.w / x.games + x.w / 1000 : 0, titles: x.titles, finals: x.finals,
+      ppg: x.games ? x.pts / x.games : 0, clutch: x.games && x.regPpg ? (x.pts / x.games / x.regPpg - 1) * 100 : 0, tie: x.apps } }));
+  const cols = [
+    { key: 'pos', label: '#', cell: (r, i) => `<td class="rk">${i + 1}</td>` },
+    { key: 'name', label: 'Team', left: true, cell: r => `<td class="t"><a href="${r.href}" style="text-decoration:none">${r.name}</a>${r.tag}</td>` },
+    { key: 'apps', label: 'Apps', sortable: true, cell: r => cellNum(String(r.v.apps)) },
+    { key: 'byes', label: 'Byes', sortable: true, cell: r => cellNum(String(r.v.byes), '#C9D3D2') },
+    { key: 'wins', label: 'W–L', sortable: true, cell: r => cellNum(r.wl) },
+    { key: 'finals', label: 'Finals', sortable: true, cell: r => cellNum(String(r.v.finals), '#C9D3D2') },
+    { key: 'titles', label: 'Titles', sortable: true, cell: r => cellNum(String(r.v.titles)) },
+    { key: 'ppg', label: 'PPG', sortable: true, cell: r => cellNum(r.v.ppg ? f1(r.v.ppg) : '—', '#C9D3D2') },
+    { key: 'clutch', label: 'Clutch', sortable: true, cell: r => `<td class="${sign(r.v.clutch)}">${r.v.ppg ? signed(r.v.clutch) + '%' : '—'}</td>` }
+  ];
+  out.push(section(`<div class="head"><h2>Playoff standings</h2><span class="note">Finished seasons · tap a column to sort</span></div>
+    ${rows.length ? sortTable(cols, rows, { key: 'titles' }) : '<p class="lead">No finished playoffs yet.</p>'}
+    <span class="note">Apps = playoff appearances. Byes = first-round byes. W–L and PPG count championship-bracket games only (no 3rd-place or consolation games). Clutch = playoff PPG vs. regular-season PPG.</span>`));
+
+  // Playoff records.
+  const all = [];
+  done.forEach(S => S.games.filter(g => g.playoff).forEach(g => all.push({ S, g })));
+  if (all.length) {
+    const flat = [].concat.apply([], all.map(({ S, g }) => [{ S, g, r: g.a, me: g.ap, them: g.bp, opp: g.b }, { S, g, r: g.b, me: g.bp, them: g.ap, opp: g.a }]));
+    const hi = flat.slice().sort((a, b) => b.me - a.me)[0];
+    const lo = flat.filter(x => x.me > 0).sort((a, b) => a.me - b.me)[0];
+    const blow = all.slice().sort((a, b) => Math.abs(b.g.ap - b.g.bp) - Math.abs(a.g.ap - a.g.bp))[0];
+    const close = all.filter(x => x.g.ap !== x.g.bp).sort((a, b) => Math.abs(a.g.ap - a.g.bp) - Math.abs(b.g.ap - b.g.bp))[0];
+    const finals = flat.filter(x => x.g.placement === 1 && x.me > x.them).sort((a, b) => b.me - a.me)[0];
+    const win = x => (x.g.ap > x.g.bp ? x.g.a : x.g.b); const lose = x => (x.g.ap > x.g.bp ? x.g.b : x.g.a);
+    const tiles = [
+      ['Highest playoff score', f2(hi.me), name(hi.S.ownerOf[hi.r]), hi.S.season + ' · Week ' + hi.g.week],
+      lo ? ['Lowest playoff score', f2(lo.me), name(lo.S.ownerOf[lo.r]), lo.S.season + ' · Week ' + lo.g.week] : null,
+      ['Biggest playoff blowout', '+' + f2(Math.abs(blow.g.ap - blow.g.bp)), name(blow.S.ownerOf[win(blow)]) + ' over ' + name(blow.S.ownerOf[lose(blow)]), blow.S.season + ' · Week ' + blow.g.week],
+      close ? ['Closest playoff game', f2(Math.abs(close.g.ap - close.g.bp)), name(close.S.ownerOf[win(close)]) + ' over ' + name(close.S.ownerOf[lose(close)]), close.S.season + ' · Week ' + close.g.week] : null,
+      finals ? ['Best title-game score', f2(finals.me), name(finals.S.ownerOf[finals.r]), finals.S.season + ' final'] : null
+    ].filter(Boolean);
+    out.push(section(`<h2>Playoff records</h2><div class="tiles">${tiles.map(t => `<div class="tile"><span class="k">${t[0]}</span><span class="v">${t[1]}</span><span class="w">${t[2]}</span><span class="d">${t[3]}</span></div>`).join('')}</div>`));
+  }
+
+  // Brackets, newest first. The current season shows the seeding as it stands.
+  const cur = M.seasons.find(S => S.isCurrent && !S.champion);
+  let brackets = '';
+  if (cur && cur.regWeeks.length) {
+    const byes = byeCountFor(cur);
+    brackets += `<details class="calc" open><summary>${cur.season} · if the season ended today</summary><div class="calc-body"><div class="rows">
+      ${cur.standings.slice(0, cur.playoffTeams).map((x, i) => `<a class="row" href="${mlink(cur.ownerOf[x.rid])}" style="grid-template-columns:32px minmax(0,1fr) auto;padding:10px 0">
+        <span class="num note">${i + 1}</span><span class="stack"><span style="font-size:14px;font-weight:500">${name(cur.ownerOf[x.rid])}</span><span class="sub">${wl(x.wins, x.losses, x.ties)} · ${comma(x.pf)} PF</span></span>
+        ${i < byes ? '<span class="tag up">Bye</span>' : '<span></span>'}</a>`).join('')}</div>
+      <a class="btn" href="${PX}s${cur.season}">Playoff and title odds →</a></div></details>`;
+  }
+  done.forEach((S, k) => {
+    const seed = r => S.st[r].rank;
+    const games = S.games.filter(g => g.playoff);
+    const total = games.reduce((m, g) => Math.max(m, g.round || 0), 0);
+    const byes = byeCountFor(S);
+    const byeTeams = S.standings.slice(0, byes).map(x => x.rid);
+    const rounds = [];
+    for (let r = 1; r <= total; r++) rounds.push(games.filter(g => g.round === r));
+    const gameRow = g => { const aw = g.ap > g.bp;
+      return `<div class="pgame"><div class="line2"><span class="${aw ? 'lead-t' : 'trail-t'}"><span class="num note">${seed(g.a)}</span> ${name(S.ownerOf[g.a])}</span><span class="num ${aw ? '' : 'trail-t'}">${f2(g.ap)}</span></div>
+        <div class="line2"><span class="${!aw ? 'lead-t' : 'trail-t'}"><span class="num note">${seed(g.b)}</span> ${name(S.ownerOf[g.b])}</span><span class="num ${!aw ? '' : 'trail-t'}">${f2(g.bp)}</span></div></div>`; };
+    brackets += `<details class="calc"${k === 0 && !brackets ? ' open' : ''}><summary><span>${S.season}${S.champion ? ` · <span class="gold-t">${name(S.ownerOf[S.champion])}</span>` : ''}</span></summary><div class="calc-body">
+      ${byeTeams.length ? `<p class="note" style="margin:0">Byes: ${byeTeams.map(r => '<span class="num">' + seed(r) + '</span> ' + name(S.ownerOf[r])).join(', ')}</p>` : ''}
+      ${rounds.map((g, i) => `<div class="stack" style="gap:8px"><span class="note" style="text-transform:uppercase;letter-spacing:.05em;font-size:11px">${ROUND_NAMES(total, i + 1)} · Week ${S.playoffWeekStart + i}</span>${g.map(gameRow).join('')}</div>`).join('')}
+      ${S.champion ? `<p style="margin:0;display:flex;align-items:center;gap:8px">${TROPHY(GOLD, 16)} <b>${name(S.ownerOf[S.champion])}</b> <span class="note">won the ${S.season} title</span></p>` : ''}
+    </div></details>`;
+  });
+  out.push(section(`<h2>Brackets</h2><div style="display:flex;flex-direction:column;gap:8px">${brackets || '<p class="lead">No playoffs yet.</p>'}</div>
+    <span class="note">Numbers are seeds. Winners in white.</span>`));
+  return out.join('');
+}
+
 // ---------- Draft history ----------
 const GRADE_COLORS = { A: '#5FC79B', B: '#9FD8B8', C: '#C9D3D2', D: '#F2B59E', F: '#F0907A' };
 function gradeOf(z) { return z >= 1 ? 'A' : z >= 0.33 ? 'B' : z >= -0.33 ? 'C' : z >= -1 ? 'D' : 'F'; }
@@ -889,6 +986,7 @@ function parse(h) {
   if (h.indexOf('m-') === 0) { const p = h.slice(2).split('@'); return { view: 'manager', id: p[0], season: p[1] || null }; }
   if (h === 'search') return { view: 'search' };
   if (h === 'awards') return { view: 'awards' };
+  if (h === 'playoffs') return { view: 'playoffs' };
   if (h === 'drafts' || h.indexOf('drafts@') === 0) return { view: 'drafts', season: h.split('@')[1] || null };
   if (h.indexOf('vs-') === 0) { const p = h.slice(3).split('~'); return { view: 'compare', a: p[0], b: p[1] }; }
   return { view: 'all' };
@@ -954,6 +1052,9 @@ async function render() {
   } else if (route.view === 'drafts') {
     $app.innerHTML = viewDrafts(route.season);
     document.title = 'Drafts' + suffix;
+  } else if (route.view === 'playoffs') {
+    $app.innerHTML = viewPlayoffs();
+    document.title = 'Playoffs' + suffix;
   } else if (route.view === 'awards') {
     $app.innerHTML = viewAwards();
     document.title = 'Awards' + suffix;
