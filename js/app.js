@@ -1,10 +1,10 @@
 // Renders the Hall of Fame. Routes: #all, #search, #s<season>, #m-<managerId>[@season], #vs-<id>~<id>.
 // Leagues after the first get a prefix: #dynasty-all, #dynasty-s2025, …
 
-import { CONFIG } from './config.js?v=202610291826';
-import { loadAll, loadLiveWeek, loadWeekStats, clearSavedSeasons } from './data.js?v=202610291826';
-import { buildModel, optimalPoints } from './model.js?v=202610291826';
-import { parse as parseQuery, answer as answerQuery, EXAMPLES, HELP, examplesFor } from './search.js?v=202610291826';
+import { CONFIG } from './config.js?v=202610291828';
+import { loadAll, loadLiveWeek, loadWeekStats, clearSavedSeasons } from './data.js?v=202610291828';
+import { buildModel, optimalPoints } from './model.js?v=202610291828';
+import { parse as parseQuery, answer as answerQuery, EXAMPLES, HELP, examplesFor } from './search.js?v=202610291828';
 
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
@@ -650,7 +650,7 @@ function breakdown(title, parts) {
 
 // Awards a manager won in one season, and across a career.
 // Major awards (champion, regular-season champ, best manager) are gold; other good awards green; bad ones red; the Sacko brown (it still counts as bad).
-const awardColor = a => (a.key === 'sacko' ? '#B4855E' : a.major ? GOLD : a.good ? '#5FC79B' : '#F0907A');
+const awardColor = a => (a.key === 'sacko' ? '#7A4E2D' : a.major ? GOLD : a.good ? '#5FC79B' : '#F0907A');
 const awardTier = a => (a.major ? 2 : a.good ? 1 : 0);
 function awardRow(a, sub) {
   return `<div class="row" style="grid-template-columns:22px minmax(0,1fr) auto;padding:12px 0">
