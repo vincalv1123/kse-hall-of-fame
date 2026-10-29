@@ -2,7 +2,7 @@
 // Finished seasons never change, so they are cached in the browser;
 // the current season is always fetched fresh.
 
-import { CONFIG } from './config.js?v=202610290451';
+import { CONFIG } from './config.js?v=202610290518';
 
 const API = 'https://api.sleeper.app/v1';
 const CACHE_VERSION = 'v5';
@@ -156,4 +156,22 @@ export async function loadAll(league, onProgress) {
 export async function loadLiveWeek(leagueId, week) {
   const list = await get('/league/' + leagueId + '/matchups/' + week);
   return (list || []).map(m => ({ ...m, points: scoreOf(m) }));
+}
+
+// One week of player stats (box-score numbers) for the matchup pop-up. Finished weeks are kept in memory.
+const STAT_KEYS = ['pass_cmp', 'pass_att', 'pass_yd', 'pass_td', 'pass_int', 'rush_att', 'rush_yd', 'rush_td', 'rec', 'rec_tgt', 'rec_yd', 'rec_td', 'fum_lost',
+  'fgm', 'fga', 'fgm_lng', 'xpm', 'xpa', 'sack', 'int', 'fum_rec', 'def_td', 'safe', 'pts_allow'];
+const statCache = {};
+export async function loadWeekStats(season, week, live) {
+  const key = season + ':' + week;
+  if (!live && statCache[key]) return statCache[key];
+  const all = await get('/stats/nfl/regular/' + season + '/' + week);
+  const slim = {};
+  Object.keys(all || {}).forEach(id => {
+    const x = all[id]; const o = {}; let any = false;
+    STAT_KEYS.forEach(k => { if (x[k] != null) { o[k] = x[k]; any = true; } });
+    if (any) slim[id] = o;
+  });
+  statCache[key] = slim;
+  return slim;
 }
