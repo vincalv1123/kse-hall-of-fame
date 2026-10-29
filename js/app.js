@@ -1,10 +1,10 @@
 // Renders the Hall of Fame. Routes: #all, #search, #s<season>, #m-<managerId>[@season], #vs-<id>~<id>.
 // Leagues after the first get a prefix: #dynasty-all, #dynasty-s2025, …
 
-import { CONFIG } from './config.js?v=202610290530';
-import { loadAll, loadLiveWeek, loadWeekStats, clearSavedSeasons } from './data.js?v=202610290530';
-import { buildModel, optimalPoints } from './model.js?v=202610290530';
-import { parse as parseQuery, answer as answerQuery, EXAMPLES, HELP, examplesFor } from './search.js?v=202610290530';
+import { CONFIG } from './config.js?v=202610290534';
+import { loadAll, loadLiveWeek, loadWeekStats, clearSavedSeasons } from './data.js?v=202610290534';
+import { buildModel, optimalPoints } from './model.js?v=202610290534';
+import { parse as parseQuery, answer as answerQuery, EXAMPLES, HELP, examplesFor } from './search.js?v=202610290534';
 
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
