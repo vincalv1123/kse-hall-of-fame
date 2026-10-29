@@ -2,7 +2,7 @@
 // season, week and player it is about, and answers from the league data.
 // Rule-based, so it understands the question shapes listed in EXAMPLES and HELP.
 
-import { parseRank, rankAnswer } from './rank.js?v=202610291824';
+import { parseRank, rankAnswer } from './rank.js?v=202610291826';
 
 export const EXAMPLES = [
   "vpcalv's highest scoring player week 7 2023",
