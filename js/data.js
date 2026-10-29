@@ -2,7 +2,7 @@
 // Finished seasons never change, so they are cached in the browser;
 // the current season is always fetched fresh.
 
-import { CONFIG } from './config.js?v=202610290518';
+import { CONFIG } from './config.js?v=202610290522';
 
 const API = 'https://api.sleeper.app/v1';
 const CACHE_VERSION = 'v5';
