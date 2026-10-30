@@ -1,10 +1,10 @@
 // Renders the Hall of Fame. Routes: #all, #search, #s<season>, #m-<managerId>[@season], #vs-<id>~<id>.
 // Leagues after the first get a prefix: #dynasty-all, #dynasty-s2025, …
 
-import { CONFIG } from './config.js?v=202610300414';
-import { loadAll, loadLiveWeek, loadWeekStats, clearSavedSeasons } from './data.js?v=202610300414';
-import { buildModel, optimalPoints } from './model.js?v=202610300414';
-import { parse as parseQuery, answer as answerQuery, EXAMPLES, HELP, examplesFor } from './search.js?v=202610300414';
+import { CONFIG } from './config.js?v=202610300420';
+import { loadAll, loadLiveWeek, loadWeekStats, clearSavedSeasons } from './data.js?v=202610300420';
+import { buildModel, optimalPoints } from './model.js?v=202610300420';
+import { parse as parseQuery, answer as answerQuery, EXAMPLES, HELP, examplesFor } from './search.js?v=202610300420';
 
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
@@ -810,6 +810,8 @@ const ordinal = n => n + (['th', 'st', 'nd', 'rd'][(n % 100 - 20) % 10] || ['th'
 // ---------- Compare ----------
 function viewCompare(a, b) {
   const lb = M.leaderboard;
+  // The Head to head tab opens on the league's fiercest rivalry.
+  if (!a && !b && M.rivalry) { a = M.rivalry.a; b = M.rivalry.b; }
   if (!M.career[a]) a = lb[0].id;
   if (!M.career[b] || b === a) b = (lb.find(x => x.id !== a) || lb[0]).id;
   const A = M.career[a]; const B = M.career[b];
