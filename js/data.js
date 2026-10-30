@@ -2,7 +2,7 @@
 // Finished seasons never change, so they are cached in the browser;
 // the current season is always fetched fresh.
 
-import { CONFIG } from './config.js?v=202610302200';
+import { CONFIG } from './config.js?v=202610302240';
 
 const API = 'https://api.sleeper.app/v1';
 const CACHE_VERSION = 'v7'; // v7: picks carry their draft slot, so traded picks can be valued
