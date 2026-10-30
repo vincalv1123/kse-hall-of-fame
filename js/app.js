@@ -1,10 +1,10 @@
 // Renders the Hall of Fame. Routes: #all, #search, #s<season>, #m-<managerId>[@season], #vs-<id>~<id>.
 // Leagues after the first get a prefix: #dynasty-all, #dynasty-s2025, …
 
-import { CONFIG } from './config.js?v=202610300644';
-import { loadAll, loadLiveWeek, loadWeekStats, clearSavedSeasons } from './data.js?v=202610300644';
-import { buildModel, optimalPoints } from './model.js?v=202610300644';
-import { parse as parseQuery, answer as answerQuery, EXAMPLES, HELP, examplesFor } from './search.js?v=202610300644';
+import { CONFIG } from './config.js?v=202610300648';
+import { loadAll, loadLiveWeek, loadWeekStats, clearSavedSeasons } from './data.js?v=202610300648';
+import { buildModel, optimalPoints } from './model.js?v=202610300648';
+import { parse as parseQuery, answer as answerQuery, EXAMPLES, HELP, examplesFor } from './search.js?v=202610300648';
 
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
@@ -483,8 +483,9 @@ function seasonAwards(S) {
   }
   const lastR = S.lastPlace != null ? S.st[S.lastPlace] : S.standings[S.standings.length - 1];
   aw.push({ key: 'sacko', k: S.isCurrent ? 'Sacko watch' : 'Sacko', rid: lastR.rid, v: wl(lastR.wins, lastR.losses, lastR.ties),
-    d: (S.isCurrent ? 'Worst record so far · ' : S.toiletBowl ? 'Lost the toilet bowl · ' : 'Last place · ') + comma(lastR.pf) + ' PF', cls: 'sacko-t2', good: false });
-  return aw;
+    d: (S.isCurrent ? 'Worst record so far · ' : S.toiletBowl ? 'Lost the toilet bowl · ' : 'Worst record · ') + comma(lastR.pf) + ' PF', cls: 'sacko-t2', good: false });
+  // Dynasty leagues don't hand out Waiver Wire King, Trade of the Year or Bust of the Draft.
+  return LG.format === 'dynasty' ? aw.filter(x => ['waiver', 'trade', 'bust'].indexOf(x.key) < 0) : aw;
 }
 
 function viewSeason(S) {
