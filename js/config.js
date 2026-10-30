@@ -13,6 +13,10 @@ export const CONFIG = {
   // Manager Score weights (must add up to 1).
   weights: { results: 0.35, startSit: 0.20, waivers: 0.15, trades: 0.20, draft: 0.10 },
 
+  // Kickers and defenses count for this share of their value in waiver, trade and draft numbers
+  // (they're easy to replace and swing week to week). 1 = full value.
+  kDefWeight: 0.5,
+
   // Bonus points added to the Results part of the score.
   bonus: { playoffs: 3, final: 5, title: 10 },
 
