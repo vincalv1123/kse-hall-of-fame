@@ -16,6 +16,11 @@ export const CONFIG = {
   // Manager Score weights (must add up to 1).
   weights: { results: 0.35, startSit: 0.20, waivers: 0.15, trades: 0.20, draft: 0.10 },
 
+  // Redraft draft grades: share of each pick's expected value that comes from hindsight
+  // (the Nth-best player's value that season for the Nth pick). The rest comes from what
+  // that slot has produced across the league's drafts. 0 = slot history only.
+  draftHindsight: 0.3,
+
   // Kickers and defenses count for this share of their value in waiver, trade and draft numbers
   // (they're easy to replace and swing week to week). 1 = full value.
   kDefWeight: 0.5,
