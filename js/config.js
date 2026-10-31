@@ -6,7 +6,10 @@ export const CONFIG = {
   // Any season of a league works as leagueId; the site follows its history both ways.
   // The first league is the default. `key` becomes the link prefix for every other league (#dynasty-…).
   leagues: [
-    { key: 'redraft', name: 'KSE Sleeper', short: 'KSE Sleeper', leagueId: '1312006417497989120', format: 'redraft' },
+    // ownerFixes: rosters Sleeper lost the owner of, by season and roster id -> the Sleeper user_id who ran it.
+    // 2024: roster 10 was Harryb69 (his stats join his other seasons); roster 12 was Gilbertpog.
+    { key: 'redraft', name: 'KSE Sleeper', short: 'KSE Sleeper', leagueId: '1312006417497989120', format: 'redraft',
+      ownerFixes: { '2024': { 10: '695454131292299264', 12: '1124112046297010176' } } },
     { key: 'dynasty', name: 'Kse Dynasty III', short: 'Dynasty', leagueId: '1312005992099102720', format: 'dynasty' }
   ],
 

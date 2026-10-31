@@ -2,7 +2,7 @@
 // Finished seasons never change, so they are cached in the browser;
 // the current season is always fetched fresh.
 
-import { CONFIG } from './config.js?v=202610310105';
+import { CONFIG } from './config.js?v=202610311350';
 
 const API = 'https://api.sleeper.app/v1';
 const CACHE_VERSION = 'v7'; // v7: picks carry their draft slot, so traded picks can be valued
@@ -167,6 +167,21 @@ export async function loadAll(league, onProgress) {
       if (done) cacheSet('season:' + lg.league_id, season);
     }
     seasons.push(season);
+  }
+  // Rosters whose owner Sleeper no longer lists: give them to the manager who ran them (config ownerFixes).
+  const fixes = league.ownerFixes || {};
+  for (const season of seasons) {
+    const f = fixes[season.season];
+    if (!f) continue;
+    for (const rid of Object.keys(f)) {
+      const r = season.rosters.find(x => String(x.roster_id) === String(rid));
+      if (!r) continue;
+      r.owner_id = f[rid];
+      if (!season.users.some(u => u.user_id === f[rid])) {
+        const u = await get('/user/' + f[rid]).catch(() => null);
+        season.users.push({ user_id: f[rid], display_name: u ? u.display_name : 'Team ' + rid, team_name: null, avatar: u ? u.avatar : null });
+      }
+    }
   }
   onProgress && onProgress('Loading player names…');
   const players = await loadPlayers();
