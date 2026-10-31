@@ -2,7 +2,7 @@
 // Finished seasons never change, so they are cached in the browser;
 // the current season is always fetched fresh.
 
-import { CONFIG } from './config.js?v=202610311400';
+import { CONFIG } from './config.js?v=202610311450';
 
 const API = 'https://api.sleeper.app/v1';
 const CACHE_VERSION = 'v7'; // v7: picks carry their draft slot, so traded picks can be valued
@@ -168,6 +168,7 @@ export async function loadAll(league, onProgress) {
     }
     seasons.push(season);
   }
+  seasons.forEach(fixDraftRosters);
   // Rosters whose owner Sleeper no longer lists: give them to the manager who ran them (config ownerFixes).
   const fixes = league.ownerFixes || {};
   for (const season of seasons) {
@@ -186,6 +187,35 @@ export async function loadAll(league, onProgress) {
   onProgress && onProgress('Loading player names…');
   const players = await loadPlayers();
   return { state, seasons: seasons.sort((a, b) => Number(b.season) - Number(a.season)), players };
+}
+
+// Sleeper sometimes credits a draft's picks to the wrong roster (seen when two managers' rosters were unassigned:
+// their drafts came back switched). Each draft is checked against week 1: if a roster's picks are mostly on a
+// different roster's week 1 lineup, and those swaps pair up one to one, the picks (and the draft's slot map) move.
+function fixDraftRosters(season) {
+  const wk1 = season.matchups && season.matchups[0];
+  if (!wk1 || !wk1.length) return;
+  const holder = {}; wk1.forEach(m => (m.players || []).forEach(pid => { holder[pid] = m.roster_id; }));
+  const lists = (season.drafts || []).map(d => d.picks).concat([season.picks || []]);
+  (season.drafts || []).forEach(d => {
+    const by = {};
+    d.picks.forEach(p => { if (!p.player_id || holder[p.player_id] == null) return; const c = by[p.roster_id] = by[p.roster_id] || {}; c[holder[p.player_id]] = (c[holder[p.player_id]] || 0) + 1; });
+    const move = {};
+    Object.keys(by).forEach(rid => {
+      const c = by[rid]; const n = Object.values(c).reduce((a, b) => a + b, 0);
+      const top = Object.keys(c).sort((a, b) => c[b] - c[a])[0];
+      if (n >= 3 && top !== rid && c[top] / n >= 0.6) move[rid] = top;
+    });
+    // Only clean swaps: every roster moved away from is moved into, one to one.
+    const from = Object.keys(move); const to = from.map(k => move[k]);
+    if (!from.length || new Set(to).size !== to.length || to.some(t => !move[t])) return;
+    const fix = rid => (move[String(rid)] != null ? Number(move[String(rid)]) : rid);
+    const ids = new Set(d.picks.map(p => p.player_id + ':' + p.pick_no));
+    const isPrimary = (season.picks || []).some(p => ids.has(p.player_id + ':' + p.pick_no));
+    lists.forEach(list => list.forEach(p => { if (ids.has(p.player_id + ':' + p.pick_no) && !p._rosterFixed) { p.roster_id = fix(p.roster_id); p._rosterFixed = true; } }));
+    if (d.slotToRoster) Object.keys(d.slotToRoster).forEach(k => { d.slotToRoster[k] = fix(d.slotToRoster[k]); });
+    if (isPrimary && season.slotToRoster && season.slotToRoster !== d.slotToRoster) Object.keys(season.slotToRoster).forEach(k => { season.slotToRoster[k] = fix(season.slotToRoster[k]); });
+  });
 }
 
 // Just the current week's scores, for the live tab's refresh.
