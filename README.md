@@ -20,6 +20,8 @@ Each part is scored against the rest of the league that season (50 = average), t
 | Trades | 20% | Redraft: value got minus value given, rest of season. Each traded player counts his points above a replacement-level starter at his position (never below 0); each traded pick counts what a pick in its slot is expected to give. Dynasty: value got minus value given over four seasons (each player's points above replacement with elite seasons multiplied, counted 100/85/70/55%; rookie picks at a fixed slot value) |
 | Draft | 10% | Each pick's points above a replacement-level starter at its position, compared with what the slot was expected to give: 70% picks around the same slot across the league's drafts, 30% the Nth-best player that season for pick N (`draftHindsight` in config.js) |
 
+Kse Dynasty III uses its own weights: results 30%, start/sit 20%, waivers 10%, trades 20% and draft 20%, where the draft part is each manager's scout grade (their rookie drafts, career-long).
+
 The career score averages every season, weighted by games played.
 
 In the dynasty league, the draft part is left out of the score (the other four are reweighted), trades keep counting in later seasons for as long as the player stays on that team, and taxi-squad players are left out of the best-possible lineup. Change weights and other settings in `js/config.js`.
