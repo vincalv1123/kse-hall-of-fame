@@ -1,10 +1,10 @@
 // Renders the Hall of Fame. Routes: #all, #search, #s<season>, #m-<managerId>[@season], #vs-<id>~<id>.
 // Leagues after the first get a prefix: #dynasty-all, #dynasty-s2025, …
 
-import { CONFIG } from './config.js?v=202611171730';
-import { loadAll, loadLiveWeek, loadWeekStats, clearSavedSeasons } from './data.js?v=202611171730';
-import { buildModel, optimalPoints } from './model.js?v=202611171730';
-import { parse as parseQuery, answer as answerQuery, EXAMPLES, HELP, examplesFor } from './search.js?v=202611171730';
+import { CONFIG } from './config.js?v=202611190417';
+import { loadAll, loadLiveWeek, loadWeekStats, clearSavedSeasons } from './data.js?v=202611190417';
+import { buildModel, optimalPoints } from './model.js?v=202611190417';
+import { parse as parseQuery, answer as answerQuery, EXAMPLES, HELP, examplesFor } from './search.js?v=202611190417';
 
 const $app = document.getElementById('app');
 const $tabs = document.getElementById('tabs');
@@ -1902,7 +1902,7 @@ function viewPlayer(pid) {
     ['Best finish', fins[0] ? esc(pos) + fins[0].k : '—', fins[0] ? fins[0].S.season : ''],
     ['Teams', String(owners.size), [...owners].map(id => name(id)).join(', ')]
   ]) : '<p class="lead">He hasn’t been on a roster in this league.</p>'), 'hero'));
-  if (dyn && rows.length && M.dynDrafts && M.dynDrafts.yearValue) out.push(dynCareer(pid, rows));
+  if (dyn && rows.length && M.dynDrafts && M.dynDrafts.yearValue && M.dynDrafts.isHit) { try { out.push(dynCareer(pid, rows)); } catch (e) { console.error(e); } }
   rows.forEach(({ S, weeks, draft, adds, trades }) => {
     const byTeam = {};
     weeks.forEach(w => { const t = byTeam[w.rid] = byTeam[w.rid] || { rid: w.rid, weeks: 0, starts: 0, pts: 0, first: w.week, last: w.week };
